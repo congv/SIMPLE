@@ -164,11 +164,12 @@ contains
     end subroutine grad_shsrch_set_indices
 
     !> minimisation routine
-    function grad_shsrch_minimize( self, irot, xy, prev_sh ) result( cxy )
+    function grad_shsrch_minimize( self, irot, xy, prev_sh, prob ) result( cxy )
         class(pftcc_shsrch_grad), intent(inout) :: self
         integer,                  intent(inout) :: irot
         real, optional,           intent(in)    :: xy(2)
         real, optional,           intent(in)    :: prev_sh(2)
+        real, optional,           intent(in)    :: prob
         real     :: corrs(self%nrots), rotmat(2,2), cxy(3), lowest_shift(2), lowest_cost, prob_rnd
         real(dp) :: init_xy(2), lowest_cost_overall, coarse_cost, initial_cost
         integer  :: loc, i, lowest_rot, init_rot
@@ -182,20 +183,24 @@ contains
             self%ospec%x_8 = [0.d0,0.d0]
         endif
         if( self%opt_angle )then
-            call pftcc_glob%gencorrs(self%reference, self%particle, self%ospec%x, corrs, kweight=params_glob%l_kweight_rot)
-            self%cur_inpl_idx   = maxloc(corrs,dim=1)
-            lowest_cost_overall = -corrs(self%cur_inpl_idx)
-            initial_cost        = lowest_cost_overall
-            if( self%coarse_init )then
-                call self%coarse_search_opt_angle(init_xy, init_rot)
-                if( init_rot /= 0 )then
-                    self%ospec%x_8    = init_xy
-                    self%ospec%x      = real(init_xy)
-                    self%cur_inpl_idx = init_rot
-                endif
-            end if
-            ! using lowest_cost_overall to probabilistically random start the shift search and stick with the resulted shifts
-            prob_rnd = -lowest_cost_overall
+            if( present(prob) )then
+                prob_rnd = prob
+            else
+                call pftcc_glob%gencorrs(self%reference, self%particle, self%ospec%x, corrs, kweight=params_glob%l_kweight_rot)
+                self%cur_inpl_idx   = maxloc(corrs,dim=1)
+                lowest_cost_overall = -corrs(self%cur_inpl_idx)
+                initial_cost        = lowest_cost_overall
+                if( self%coarse_init )then
+                    call self%coarse_search_opt_angle(init_xy, init_rot)
+                    if( init_rot /= 0 )then
+                        self%ospec%x_8    = init_xy
+                        self%ospec%x      = real(init_xy)
+                        self%cur_inpl_idx = init_rot
+                    endif
+                end if
+                ! using lowest_cost_overall to probabilistically random start the shift search and stick with the resulted shifts
+                prob_rnd = -lowest_cost_overall
+            endif
             if( (trim(params_glob%sh_rnd).eq.'yes') .and. (ran3() > prob_rnd) )then
                 init_xy(1)     = 2.*(ran3()-0.5) * params_glob%sh_sig
                 init_xy(2)     = 2.*(ran3()-0.5) * params_glob%sh_sig
@@ -239,25 +244,29 @@ contains
                 endif
             endif
         else
-            self%cur_inpl_idx   = irot
-            lowest_cost_overall = -pftcc_glob%gencorr_for_rot_8(self%reference, self%particle, self%ospec%x_8, self%cur_inpl_idx)
-            initial_cost        = lowest_cost_overall
-            if( perform_rndstart )then
-                init_xy(1)     = 2.*(ran3()-0.5) * init_range
-                init_xy(2)     = 2.*(ran3()-0.5) * init_range
-                self%ospec%x_8 = init_xy
-                self%ospec%x   = real(init_xy)
-            endif
-            if( self%coarse_init )then
-                call self%coarse_search(coarse_cost, init_xy)
-                if( coarse_cost < lowest_cost_overall )then
-                    lowest_cost_overall = coarse_cost
-                    self%ospec%x_8      = init_xy
-                    self%ospec%x        = real(init_xy)
+            if( present(prob) )then
+                prob_rnd = prob
+            else
+                self%cur_inpl_idx   = irot
+                lowest_cost_overall = -pftcc_glob%gencorr_for_rot_8(self%reference, self%particle, self%ospec%x_8, self%cur_inpl_idx)
+                initial_cost        = lowest_cost_overall
+                if( perform_rndstart )then
+                    init_xy(1)     = 2.*(ran3()-0.5) * init_range
+                    init_xy(2)     = 2.*(ran3()-0.5) * init_range
+                    self%ospec%x_8 = init_xy
+                    self%ospec%x   = real(init_xy)
                 endif
-            end if
-            ! using lowest_cost_overall to probabilistically random start the shift search and stick with the resulted shifts
-            prob_rnd = -lowest_cost_overall
+                if( self%coarse_init )then
+                    call self%coarse_search(coarse_cost, init_xy)
+                    if( coarse_cost < lowest_cost_overall )then
+                        lowest_cost_overall = coarse_cost
+                        self%ospec%x_8      = init_xy
+                        self%ospec%x        = real(init_xy)
+                    endif
+                end if
+                ! using lowest_cost_overall to probabilistically random start the shift search and stick with the resulted shifts
+                prob_rnd = -lowest_cost_overall
+            endif
             if( (trim(params_glob%sh_rnd).eq.'yes') .and. (ran3() > prob_rnd) )then
                 init_xy(1)     = 2.*(ran3()-0.5) * params_glob%sh_sig
                 init_xy(2)     = 2.*(ran3()-0.5) * params_glob%sh_sig
