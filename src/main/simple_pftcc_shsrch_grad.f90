@@ -204,9 +204,9 @@ contains
                 self%ospec%x   = real(init_xy)
                 call pftcc_glob%gencorrs(self%reference, self%particle, self%ospec%x, corrs, kweight=params_glob%l_kweight_rot)
                 self%cur_inpl_idx = maxloc(corrs,dim=1)
-                irot    =   self%cur_inpl_idx
-                cxy(1)  = - corrs(self%cur_inpl_idx)    ! correlation
-                cxy(2:) =   self%ospec%x                ! shift
+                irot    = self%cur_inpl_idx
+                cxy(1)  = corrs(self%cur_inpl_idx)    ! correlation
+                cxy(2:) = self%ospec%x                ! shift
                 ! rotate the shift vector to the frame of reference
                 call rotmat2d(pftcc_glob%get_rot(irot), rotmat)
                 cxy(2:) = matmul(cxy(2:), rotmat)
