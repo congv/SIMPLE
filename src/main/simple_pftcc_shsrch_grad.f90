@@ -201,20 +201,29 @@ contains
                 ! using lowest_cost_overall to probabilistically random start the shift search and stick with the resulted shifts
                 prob_rnd = -lowest_cost_overall
             endif
-            if( (trim(params_glob%sh_rnd).eq.'yes') .and. (ran3() > prob_rnd) )then
-                init_xy(1)     = 2.*(ran3()-0.5) * params_glob%sh_sig
-                init_xy(2)     = 2.*(ran3()-0.5) * params_glob%sh_sig
-                if( present(prev_sh) ) init_xy = init_xy - prev_sh
-                self%ospec%x_8 = init_xy
-                self%ospec%x   = real(init_xy)
-                call pftcc_glob%gencorrs(self%reference, self%particle, self%ospec%x, corrs, kweight=params_glob%l_kweight_rot)
-                self%cur_inpl_idx = maxloc(corrs,dim=1)
-                irot    = self%cur_inpl_idx
-                cxy(1)  = corrs(self%cur_inpl_idx)    ! correlation
-                cxy(2:) = self%ospec%x                ! shift
-                ! rotate the shift vector to the frame of reference
-                call rotmat2d(pftcc_glob%get_rot(irot), rotmat)
-                cxy(2:) = matmul(cxy(2:), rotmat)
+            if( trim(params_glob%sh_rnd).eq.'yes' )then
+                if( ran3() > prob_rnd )then
+                    init_xy(1)     = 2.*(ran3()-0.5) * params_glob%sh_sig
+                    init_xy(2)     = 2.*(ran3()-0.5) * params_glob%sh_sig
+                    if( present(prev_sh) ) init_xy = init_xy - prev_sh
+                    self%ospec%x_8 = init_xy
+                    self%ospec%x   = real(init_xy)
+                    call pftcc_glob%gencorrs(self%reference, self%particle, self%ospec%x, corrs, kweight=params_glob%l_kweight_rot)
+                    self%cur_inpl_idx = maxloc(corrs,dim=1)
+                    irot    = self%cur_inpl_idx
+                    cxy(1)  = corrs(self%cur_inpl_idx)    ! correlation
+                    cxy(2:) = self%ospec%x                ! shift
+                    ! rotate the shift vector to the frame of reference
+                    call rotmat2d(pftcc_glob%get_rot(irot), rotmat)
+                    cxy(2:) = matmul(cxy(2:), rotmat)
+                else
+                    cxy(2:) = xy
+                    if( present(prob) )then
+                        cxy(1) = prob
+                    else
+                        cxy(1) = -lowest_cost_overall
+                    endif
+                endif
             else
                 ! shift search / in-plane rot update
                 do i = 1,self%max_evals
