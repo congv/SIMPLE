@@ -60,9 +60,9 @@ contains
                     & self%spec%eulprob_obj_part%assgn_map(iptcl_map)%y], corr)
                 else
                     if( trim(params_glob%sh_ori_rnd) .eq. 'yes' )then
-                        call self%s%inpl_srch(ref=iref, xy=[0.,0.], irot_in=irot, prev_sh=self%s%prev_shvec, prob=corr)
+                        call self%s%inpl_srch(ref=iref, xy=[0.,0.], irot_in=irot, prev_sh=self%s%prev_shvec)
                     else
-                        call self%s%inpl_srch(ref=iref, xy=[0.,0.], irot_in=irot, prob=corr)
+                        call self%s%inpl_srch(ref=iref, xy=[0.,0.], irot_in=irot)
                     endif
                     ! checking if shift search is good
                     if( s3D%proj_space_inplinds(iref, ithr) < 1 )then

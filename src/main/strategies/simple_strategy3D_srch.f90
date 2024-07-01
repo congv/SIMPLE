@@ -209,7 +209,7 @@ contains
             endif
             ! BFGS over shifts with in-plane rot exhaustive callback
             call self%grad_shsrch_obj%set_indices(iref, self%iptcl)
-            cxy = self%grad_shsrch_obj%minimize(irot=irot, xy=xy, prev_sh=prev_sh, prob=prob)
+            cxy = self%grad_shsrch_obj%minimize(irot=irot, xy=xy, prev_sh=prev_sh)
             if( irot > 0 ) call self%store_solution(iref, irot, cxy(1), sh=cxy(2:3))
         endif
     end subroutine inpl_srch

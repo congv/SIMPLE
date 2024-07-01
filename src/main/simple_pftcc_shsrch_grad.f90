@@ -164,12 +164,11 @@ contains
     end subroutine grad_shsrch_set_indices
 
     !> minimisation routine
-    function grad_shsrch_minimize( self, irot, xy, prev_sh, prob ) result( cxy )
+    function grad_shsrch_minimize( self, irot, xy, prev_sh ) result( cxy )
         class(pftcc_shsrch_grad), intent(inout) :: self
         integer,                  intent(inout) :: irot
         real, optional,           intent(in)    :: xy(2)
         real, optional,           intent(in)    :: prev_sh(2)
-        real, optional,           intent(in)    :: prob
         real     :: corrs(self%nrots), rotmat(2,2), cxy(3), lowest_shift(2), lowest_cost, prob_rnd
         real(dp) :: init_xy(2), lowest_cost_overall, coarse_cost, initial_cost
         integer  :: loc, i, lowest_rot, init_rot
@@ -197,24 +196,17 @@ contains
             end if
             ! using lowest_cost_overall to probabilistically random start the shift search and stick with the resulted shifts
             prob_rnd = -lowest_cost_overall
-            if( present(prob) ) prob_rnd = prob
             if( (trim(params_glob%sh_rnd).eq.'yes') .and. (ran3() > prob_rnd) )then
                 init_xy(1)     = 2.*(ran3()-0.5) * params_glob%sh_sig
                 init_xy(2)     = 2.*(ran3()-0.5) * params_glob%sh_sig
                 if( present(prev_sh) ) init_xy = init_xy - prev_sh
                 self%ospec%x_8 = init_xy
                 self%ospec%x   = real(init_xy)
-                ! shift search / in-plane rot update
-                do i = 1,self%max_evals
-                    call self%opt_obj%minimize(self%ospec, self, lowest_cost)
-                    call pftcc_glob%gencorrs(self%reference, self%particle, self%ospec%x, corrs, kweight=params_glob%l_kweight_rot)
-                    loc = maxloc(corrs,dim=1)
-                    if( loc == self%cur_inpl_idx ) exit
-                    self%cur_inpl_idx = loc
-                end do
+                call pftcc_glob%gencorrs(self%reference, self%particle, self%ospec%x, corrs, kweight=params_glob%l_kweight_rot)
+                self%cur_inpl_idx = maxloc(corrs,dim=1)
                 irot    =   self%cur_inpl_idx
-                cxy(1)  = - real(lowest_cost)  ! correlation
-                cxy(2:) =   self%ospec%x       ! shift
+                cxy(1)  = - corrs(self%cur_inpl_idx)    ! correlation
+                cxy(2:) =   self%ospec%x                ! shift
                 ! rotate the shift vector to the frame of reference
                 call rotmat2d(pftcc_glob%get_rot(irot), rotmat)
                 cxy(2:) = matmul(cxy(2:), rotmat)
@@ -266,7 +258,6 @@ contains
             end if
             ! using lowest_cost_overall to probabilistically random start the shift search and stick with the resulted shifts
             prob_rnd = -lowest_cost_overall
-            if( present(prob) ) prob_rnd = prob
             if( (trim(params_glob%sh_rnd).eq.'yes') .and. (ran3() > prob_rnd) )then
                 init_xy(1)     = 2.*(ran3()-0.5) * params_glob%sh_sig
                 init_xy(2)     = 2.*(ran3()-0.5) * params_glob%sh_sig
