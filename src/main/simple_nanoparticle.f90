@@ -651,26 +651,25 @@ contains
     ! obtained with that threshold reaches the maximum value.
     subroutine binarize_and_find_centers( self )
         class(nanoparticle), intent(inout) :: self
-        type(binimage)       :: img_bin_t
-        type(binimage)       :: img_ccs_t
-        type(atoms)          :: atom
-        type(image)          :: simulated_distrib
-        integer, allocatable :: imat_t(:,:,:)
-        real,    allocatable :: x_mat(:)  ! vectorization of the volume
-        real,    allocatable :: coords(:,:)
-        real,    allocatable :: rmat(:,:,:)
-        integer :: i, fnr
-        real    :: otsu_thresh, corr, step, step_refine, max_corr, thresh, thresh_opt, lbt, rbt
-        logical, parameter      :: L_BENCH = .false.
+        logical,             parameter     :: L_BENCH = .true.
+        integer,             allocatable   :: imat_t(:,:,:)
+        real,                allocatable   :: x_mat(:)  ! vectorization of the volume
+        real,                allocatable   :: coords(:,:)
+        real,                allocatable   :: rmat(:,:,:)
+        type(binimage)          :: img_bin_t, img_ccs_t
+        type(atoms)             :: atom
+        type(image)             :: simulated_distrib
+        integer                 :: i, fnr
+        real                    :: otsu_thresh, corr, step, step_refine, max_corr, thresh, thresh_opt, lbt, rbt
         real(timer_int_kind)    :: rt_find_ccs, rt_find_centers, rt_gen_sim, rt_real_corr, rt_tot
         integer(timer_int_kind) ::  t_find_ccs,  t_find_centers,  t_gen_sim,  t_real_corr,  t_tot
         call otsu_nano(self%img,otsu_thresh) ! find initial threshold
         write(logfhandle,'(A)') '>>> BINARIZATION'
-        rmat = self%img%get_rmat()
+        rmat  = self%img%get_rmat()
         x_mat = pack(rmat(:self%ldim(1),:self%ldim(2),:self%ldim(3)),&
                     &rmat(:self%ldim(1),:self%ldim(2),:self%ldim(3)) >= 0.)
         allocate(imat_t(self%ldim(1), self%ldim(2), self%ldim(3)), source = 0)
-        step = (maxval(x_mat)-otsu_thresh )/real(NBIN_THRESH)
+        step        = (maxval(x_mat)-otsu_thresh )/real(NBIN_THRESH)
         step_refine = step / 6.
         deallocate(x_mat)
         call simulated_distrib%new(self%ldim,self%smpd)
@@ -699,9 +698,7 @@ contains
         lbt    = thresh_opt - step + step_refine
         rbt    = thresh_opt + step - step_refine
         thresh = lbt
-        i      = NBIN_THRESH
         do while( thresh <= rbt )
-            i = i + 1
             corr = t2c( thresh )
             write(logfhandle,*) 'threshold: ', thresh, 'corr: ', corr
             if( corr > max_corr )then
@@ -727,7 +724,7 @@ contains
             write(fnr,'(a,1x,f9.2)') 'real_corr      : ', (rt_real_corr/rt_tot)    * 100.
             write(fnr,'(a,1x,f9.2)') 'total time     : ', rt_tot
             write(fnr,'(a,1x,f9.2)') '% accounted for: ',&
-            &((rt_find_ccs+rt_find_centers+rt_gen_sim+rt_real_corr)/rt_tot)     * 100.
+               &((rt_find_ccs+rt_find_centers+rt_gen_sim+rt_real_corr)/rt_tot)     * 100.
             call fclose(fnr)
         endif
         write(logfhandle,*) 'optimal threshold: ', thresh_opt, 'max_corr: ', max_corr
@@ -755,8 +752,8 @@ contains
         subroutine otsu_nano( img, scaled_thresh )
             type(image),    intent(inout) :: img
             real,           intent(out)   :: scaled_thresh ! returns the threshold in the correct range
-            real, pointer     :: rmat(:,:,:)
-            real, allocatable :: x(:)
+            real,           pointer       :: rmat(:,:,:)
+            real,           allocatable   :: x(:)
             call img%get_rmat_ptr(rmat)
             x = pack(rmat(:self%ldim(1),:self%ldim(2),:self%ldim(3)),&
                     &rmat(:self%ldim(1),:self%ldim(2),:self%ldim(3)) > 0.)
@@ -780,7 +777,7 @@ contains
             ! Find atom centers in the generated distributions
             call self%update_ncc(img_ccs_t) ! self%n_cc is needed in find_centers
             t_find_centers = tic()
-            call self%find_centers(img_bin_t, img_ccs_t, coords)
+            call self%find_centers(img_ccs_t, coords)
             rt_find_centers = rt_find_centers + toc(t_find_centers)
             ! Generate a simulated distribution based on those center
             t_gen_sim = tic()
@@ -802,20 +799,15 @@ contains
     ! Find the centers coordinates of the atoms in the particle
     ! and save it in the global variable centers.
     ! If coords is present, it saves it also in coords.
-    subroutine find_centers( self, img_bin, img_cc, coords, imat )
-        class(nanoparticle),                   intent(inout) :: self
-        type(binimage), optional,              intent(inout) :: img_bin, img_cc
-        integer,        optional,              intent(in)    :: imat(:,:,:)
-        real,           optional, allocatable, intent(out)   :: coords(:,:)
-        real,        pointer :: rmat_raw(:,:,:)
+    subroutine find_centers( self, img_cc, coords, imat )
+        class(nanoparticle),            intent(inout) :: self
+        type(binimage),       optional, intent(inout) :: img_cc
+        integer,              optional, intent(in)    :: imat(:,:,:)
+        real,    allocatable, optional, intent(out)   :: coords(:,:)
         integer, allocatable :: imat_cc_in(:,:,:)
-        logical, allocatable :: mask(:,:,:)
-        integer :: i, ii, jj, kk
-        real    :: m(3), sum_mass
-        ! sanity check
-        if( present(img_bin) .and. .not. present(img_cc) ) then
-            if( .not. present(imat)) THROW_HARD('img_bin and img_cc have to be both present')
-        end if
+        real,        pointer :: rmat_raw(:,:,:)
+        integer  :: i, ii, jj, kk
+        real(dp) :: m(3,self%n_cc), sum_mass(self%n_cc)
         ! global variables allocation
         if( allocated(self%atominfo) ) deallocate(self%atominfo)
         allocate( self%atominfo(self%n_cc) )
@@ -827,31 +819,30 @@ contains
             call self%img_cc%get_imat(imat_cc_in)
         endif
         call self%img_raw%get_rmat_ptr(rmat_raw)
-        allocate(mask(self%ldim(1),self%ldim(2),self%ldim(3)), source=.true.)
-        !$omp parallel do default(shared) private(i,ii,jj,kk,mask,m,sum_mass) schedule(static) proc_bind(close)
-        do i=1,self%n_cc
-            mask     = .true.
-            where( imat_cc_in /= i ) mask = .false.
-            m        = 0.
-            sum_mass = 0.
-            do ii = 1, self%ldim(1)
-                do jj = 1, self%ldim(2)
-                    do kk = 1, self%ldim(3)
-                        if( mask(ii,jj,kk) )then
-                            m = m + real([ii,jj,kk]) * rmat_raw(ii,jj,kk)
-                            sum_mass = sum_mass + rmat_raw(ii,jj,kk)
-                        endif
-                    enddo
+        m        = 0._dp
+        sum_mass = 0._dp
+        !$omp parallel do collapse(3) default(shared) private(i,ii,jj,kk) schedule(static) proc_bind(close)
+        do kk = 1, self%ldim(3)
+            do jj = 1, self%ldim(2)
+                do ii = 1, self%ldim(1)
+                    i = imat_cc_in(ii,jj,kk)
+                    if( i >= 1 .and. i <= self%n_cc )then
+                        m(:,i)      = m(:,i)      + real(rmat_raw(ii,jj,kk),dp) * real([ii,jj,kk],dp)
+                        sum_mass(i) = sum_mass(i) + real(rmat_raw(ii,jj,kk),dp)
+                    endif
                 enddo
             enddo
-            self%atominfo(i)%center(:) = m / sum_mass
         enddo
         !$omp end parallel do
+        do i = 1, self%n_cc
+            self%atominfo(i)%center = real([self%ldim(1),self%ldim(2),self%ldim(3)]) / 2.
+            if( sum_mass(i) > DTINY ) self%atominfo(i)%center = real(m(:,i) / sum_mass(i))
+        enddo
         ! saving centers coordinates, optional
         if( present(coords) )then
             allocate(coords(3,self%n_cc))
             do i=1,self%n_cc
-                coords(:,i) = self%atominfo(i)%center(:)
+                coords(:,i) = self%atominfo(i)%center
             enddo
         endif
     end subroutine find_centers
@@ -944,9 +935,9 @@ contains
             new_center1 = maxloc(rmat_pc(:self%ldim(1),:self%ldim(2),:self%ldim(3)), mask=imat == icc)
             cnt = cnt + 1
             new_centers(:,cnt) = real(new_center1)
-            do i = 1, self%ldim(1)
+            do k = 1, self%ldim(3)
                 do j = 1, self%ldim(2)
-                    do k = 1, self%ldim(3)
+                    do i = 1, self%ldim(1)
                         if( imat(i,j,k) == icc )then
                             if(((real(i - new_center1(1)))**2 + (real(j - new_center1(2)))**2 + &
                             &   (real(k - new_center1(3)))**2) * self%smpd  <=  (0.9 * self%theoretical_radius)**2) then
@@ -969,9 +960,9 @@ contains
                     cnt = cnt + 1
                     new_centers(:,cnt) = real(new_center2)
                     ! In the case of two merged atoms, build the second atom
-                    do i = 1, self%ldim(1)
+                    do k = 1, self%ldim(3)
                         do j = 1, self%ldim(2)
-                            do k = 1, self%ldim(3)
+                            do i = 1, self%ldim(1)
                                 if( imat(i,j,k) == icc )then
                                     if(((real(i - new_center2(1)))**2 + (real(j - new_center2(2)))**2 +&
                                     &   (real(k - new_center2(3)))**2) * self%smpd <= (0.9 * self%theoretical_radius)**2 )then
@@ -998,9 +989,9 @@ contains
                     new_centers(:,cnt) = real(new_center3)
                     found3d_cen = .false.
                     ! In the case of two merged atoms, build the second atom
-                    do i = 1, self%ldim(1)
+                    do k = 1, self%ldim(3)
                         do j = 1, self%ldim(2)
-                            do k = 1, self%ldim(3)
+                            do i = 1, self%ldim(1)
                                 if( imat(i,j,k) == icc )then
                                     if( ((real(i - new_center3(1)))**2 + (real(j - new_center3(2)))**2 + &
                                     &    (real(k - new_center3(3)))**2) * self%smpd <= (0.9 * self%theoretical_radius)**2 )then
@@ -1507,7 +1498,7 @@ contains
                 ! Generate masks
                 cn_mask   = self%atominfo(:)%cn_std == cn
                 size_mask = self%atominfo(:)%size >= NVOX_THRESH .and. cn_mask
-                adp_mask = (.not. self%atominfo(:)%tossADP) .and. cn_mask
+                adp_mask  = (.not. self%atominfo(:)%tossADP) .and. cn_mask
                 n         = count(cn_mask)
                 if( n == 0 ) return
                 ! -- # atoms
@@ -1588,8 +1579,8 @@ contains
                 write(funit, '(A)') 'X'//CSV_DELIM//'Y'//CSV_DELIM//'INTENSITY'
                 601 format(F10.6,A2)
                 602 format(F10.6)
-                do i = 1, self%ldim(1)
-                    do j = 1, self%ldim(2)
+                do j = 1, self%ldim(2)
+                    do i = 1, self%ldim(1)
                         if ( imat_cc(i, j, center(3)) == cc_largest ) then
                             write(funit,601,advance='no') real(i-center(1)),    CSV_DELIM ! X
                             write(funit,601,advance='no') real(j-center(2)),    CSV_DELIM ! Y

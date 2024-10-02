@@ -184,9 +184,9 @@ contains
         endif
         ! enumerate white pixels
         cnt = 0 ! # labels
-        do i = 1, self%bldim(1)
+        do k = 1, self%bldim(3)
             do j = 1, self%bldim(2)
-                do k = 1, self%bldim(3)
+                do i = 1, self%bldim(1)
                     if( self%bimat(i,j,k) > 0 )then
                         cnt = cnt + 1
                         ccimage_unordered%bimat(i,j,k) = cnt
@@ -203,9 +203,9 @@ contains
                 mat4compare = ccimage_unordered%bimat
                 diff = 0
                 if( self%bldim(3) > 1 ) then
-                    do i = 1, self%bldim(1)
+                    do k = 1, self%bldim(3)
                         do j = 1, self%bldim(2)
-                            do k = 1, self%bldim(3)
+                            do i = 1, self%bldim(1)
                                 if( self%bimat(i,j,k) > 0) then ! not background
                                     call neigh_8_3D(ccimage_unordered%bldim, ccimage_unordered%bimat, [i,j,k], neigh_8_pixs, nsz)
                                     ccimage_unordered%bimat(i,j,k) = minval(neigh_8_pixs(:nsz), neigh_8_pixs(:nsz) > 0)
@@ -215,8 +215,8 @@ contains
                         enddo
                     enddo
                 else
-                    do i = 1, self%bldim(1)
-                        do j = 1, self%bldim(2)
+                    do j = 1, self%bldim(2)
+                        do i = 1, self%bldim(1)
                             if( self%bimat(i,j,1) > 0) then ! not background
                                 call neigh_8(ccimage_unordered%bldim, ccimage_unordered%bimat, [i,j,1], neigh_8_pixs, nsz)
                                 ccimage_unordered%bimat(i,j,1) = minval(neigh_8_pixs(:nsz), neigh_8_pixs(:nsz) > 0)
@@ -230,9 +230,9 @@ contains
         enddo
         ! enumerate connected components
         cnt = 0
-        do i = 1, self%bldim(1)
+        do k = 1, self%bldim(3)
             do j = 1, self%bldim(2)
-                do k = 1, self%bldim(3)
+                do i = 1, self%bldim(1)
                     if( ccimage_unordered%bimat(i,j,k) > 0) then ! rmat == 0  --> background
                         cnt = cnt + 1
                         tmp = ccimage_unordered%bimat(i,j,k)
@@ -478,9 +478,9 @@ contains
             do j=1,self%bldim(2)
                 do k=1,self%bldim(3)
                     if( self%bimat(i,j,k) < 1 ) cycle
-                    do ii=1,self%bldim(1)
+                    do kk=1,self%bldim(3)
                         do jj=1,self%bldim(2)
-                            do kk=1,self%bldim(3)
+                            do ii=1,self%bldim(1)
                                 if( self%bimat(ii,jj,kk) < 1 ) cycle
                                 distsq = sum(([i,j,k] - [ii,jj,kk])**2)
                                 if( distsq > maxdistsq ) maxdistsq = distsq

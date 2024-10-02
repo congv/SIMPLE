@@ -660,7 +660,7 @@ use simple_stat
         pos_inds = pack(self%inds_offset(:,:,:),  mask=self%box_scores(:,:,:) >= self%thres .and. self%msk(:,:,:))
         npos     = size(pos_inds, dim=1)
         call nano%set_ncc(npos)
-        call nano%find_centers(img_bin=bimg, imat=imat_cc, coords=coords)
+        call nano%find_centers(imat=imat_cc, coords=coords)
         call self%find_centers
         do ipos = 1, npos
             print *, 'my method center pos: ', (self%center_positions(pos_inds(ipos),:) - 1) * self%smpd
