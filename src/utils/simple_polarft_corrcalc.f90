@@ -2181,7 +2181,7 @@ contains
         real(dp),                intent(out)   :: f, grad(2)
         complex(dp), pointer :: pft_ref_8(:,:), shmat_8(:,:), pft_ref_tmp_8(:,:)
         integer              :: ithr, i
-        i    =  self%pinds(iptcl)
+        i    = self%pinds(iptcl)
         ithr = omp_get_thread_num() + 1
         pft_ref_8     => self%heap_vars(ithr)%pft_ref_8
         pft_ref_tmp_8 => self%heap_vars(ithr)%pft_ref_tmp_8
@@ -2208,10 +2208,10 @@ contains
         real(dp),                intent(out)   :: f, grad(2)
         real(dp) :: sqsum_ref, sqsum_ptcl, denom
         integer  :: k, i
-        i           = self%pinds(iptcl)
-        sqsum_ref   = 0.d0
-        f           = 0.d0
-        grad        = 0.d0
+        i         = self%pinds(iptcl)
+        sqsum_ref = 0.d0
+        f         = 0.d0
+        grad      = 0.d0
         if( self%with_ctf )then
             if( params_glob%l_kweight_shift )then
                 sqsum_ptcl = self%ksqsums_ptcls(i)
@@ -2309,7 +2309,7 @@ contains
         call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
         if( self%with_ctf ) pft_ref_tmp = pft_ref_tmp * self%ctfmats(:,:,i)
         do k = self%kfromto(1),self%kfromto(2)
-            w      = real(k,dp) / real(self%sigma2_noise(k,iptcl))
+            w       = real(k,dp) / real(self%sigma2_noise(k,iptcl))
             grad(2) = grad(2) + w * real(sum(pft_ref_tmp(:,k) * conjg(pft_diff(:,k))),dp)
         end do
         f    = dexp( -f / denom )
@@ -2325,7 +2325,7 @@ contains
         complex(dp), pointer :: pft_ref_8(:,:), shmat_8(:,:), pft_ref_tmp_8(:,:)
         real(dp) :: f
         integer  :: ithr, i
-        i    =  self%pinds(iptcl)
+        i    = self%pinds(iptcl)
         ithr = omp_get_thread_num() + 1
         pft_ref_8     => self%heap_vars(ithr)%pft_ref_8
         pft_ref_tmp_8 => self%heap_vars(ithr)%pft_ref_tmp_8
@@ -2502,8 +2502,8 @@ contains
         T1        = 0.d0
         T2        = 0.d0
         do k = self%kfromto(1),self%kfromto(2)
-            sqsum_ref  = sqsum_ref + real(k,kind=dp) * sum(real(pft_ref_8(:,k) * conjg(pft_ref_8(:,k)),dp))
-            num        = num       + real(k,kind=dp) * sum(real(pft_ref_8(:,k) * conjg(self%pfts_ptcls(:,k,i)),dp))
+            sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(pft_ref_8(:,k) * conjg(pft_ref_8(:,k)),dp))
+            num       = num       + real(k,kind=dp) * sum(real(pft_ref_8(:,k) * conjg(self%pfts_ptcls(:,k,i)),dp))
             do j = 1,3
                 T1(j) = T1(j) + real(k,kind=dp) * real(sum(pft_dref_8(:,k,j) * conjg(self%pfts_ptcls(:,k,i))),dp)
                 T2(j) = T2(j) + real(k,kind=dp) * real(sum(pft_dref_8(:,k,j) * conjg(pft_ref_8(:,k))),dp)

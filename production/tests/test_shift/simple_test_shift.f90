@@ -30,15 +30,16 @@ logical                :: be_verbose=.false.
 real,    parameter     :: SHMAG = 3.0
 real,    parameter     :: SNR   = 0.1
 real,    parameter     :: BFAC  = 10.
-integer, parameter     :: SH_ITERS = 5, N_SH = 5, N_PTCLS = N_SH**2
+integer, parameter     :: SH_ITERS = 10, N_SH = 5, N_PTCLS = N_SH**2
 logical, allocatable   :: ptcl_mask(:)
 integer, allocatable   :: pinds(:)
 type(ctfparams)        :: ctfparms
 type(euclid_sigma2)    :: eucl
-real, allocatable      :: sigma2_group(:,:,:), truth_sh(:,:)
+real,    allocatable   :: sigma2_group(:,:,:), truth_sh(:,:), cur_sh(:,:)
+logical, allocatable   :: pmask2D(:,:)
 real                   :: cxy(3), lims(2,2), lims_init(2,2), rnd_shifts(2,N_SH), sh, shifts_cnt(N_SH), shifts_dist(N_SH),&
                          &min_truth, correct_cnt, truth_cnt(N_SH)
-integer                :: xsh, ysh, xbest, ybest, i, irot, ne, no, iptcl, nptcls2update, ithr, iter
+integer                :: xsh, ysh, xbest, ybest, i, irot, ne, no, iptcl, nptcls2update, ithr, iter, pdim(3)
 logical                :: mrc_exists
 if( command_argument_count() < 4 )then
     write(logfhandle,'(a)',advance='no') 'ERROR! required arguments: '
@@ -94,7 +95,7 @@ do i = 1, N_SH
     if( ran3() < 0.5 ) sh = -sh
     rnd_shifts(2,i) = sh
 enddo
-allocate(truth_sh(p%fromp:p%top,2))
+allocate(truth_sh(p%fromp:p%top,2), cur_sh(p%fromp:p%top,2), source=0.)
 do iptcl = p%fromp,p%top
     call os%set(iptcl,'state',1.)
     call os%set(iptcl,'w',    1.)
@@ -131,6 +132,9 @@ do ithr = 1,nthr_glob
 enddo
 
 ! references
+pdim = pftcc%get_pdim()
+allocate(pmask2D(pdim(1), pdim(2):pdim(3)), source=.true.)
+call rnd_inds
 call restore_read_polarize_cavgs(0)
 
 ! particles
@@ -158,6 +162,17 @@ allocate( sigma2_group(2,1,1:fdim(p%box)-1), source=0. )
 shifts_cnt = 0
 min_truth  = 0.
 do iter = 1, SH_ITERS
+    ! particles
+    !$omp parallel do default(shared) private(iptcl,ithr)&
+    !$omp schedule(static) proc_bind(close)
+    do iptcl = 1,p%nptcls
+        ithr = omp_get_thread_num() + 1
+        call prepimg4align(iptcl, b%imgbatch(iptcl), ptcl_match_imgs(ithr))
+        call b%imgbatch(iptcl)%ifft
+        call b%img_crop_polarizer%polarize(pftcc, ptcl_match_imgs(ithr), iptcl, .true., .true., mask2D=pmask2D)
+        call pftcc%set_eo(iptcl, nint(b%spproj_field%get(iptcl,'eo'))<=0 )
+    end do
+    !$omp end parallel do
     ne = 0
     no = 0
     do iptcl = p%fromp,p%top
@@ -203,6 +218,7 @@ do iter = 1, SH_ITERS
         endif
     enddo
 
+    call rnd_inds
     call restore_read_polarize_cavgs(iter)
 enddo
 
@@ -236,6 +252,18 @@ call restore_read_polarize_cavgs(iter)
 
 contains
 
+    subroutine rnd_inds()
+        integer, parameter :: RND_FRAC = 0.3
+        integer :: i, k, num
+        pmask2D = .true.
+        num     = floor(RND_FRAC * real(pdim(1)))
+        do k = pdim(2), pdim(3)
+            do i = 1, num
+                pmask2D(floor(ran3() * pdim(1)) + 1, k) = .false.
+            enddo
+        enddo
+    end subroutine rnd_inds
+
     subroutine restore_read_polarize_cavgs( iter )
         integer, intent(in) :: iter
         p%which_iter = iter
@@ -257,9 +285,9 @@ contains
         call b%img_crop_polarizer%init_polarizer(pftcc, p%alpha)
         call match_imgs(1)%new([p%box_crop, p%box_crop, 1], p%smpd_crop, wthreads=.false.)
         call prep2Dref(cavgs_even(1), match_imgs(1), 1, iseven=.true., center=.false.)
-        call b%img_crop_polarizer%polarize(pftcc, match_imgs(1), 1, isptcl=.false., iseven=.true.)
+        call b%img_crop_polarizer%polarize(pftcc, match_imgs(1), 1, isptcl=.false., iseven=.true.,  mask2D=pmask2D)
         call prep2Dref(cavgs_odd(1), match_imgs(1), 1, iseven=.false., center=.false.)
-        call b%img_crop_polarizer%polarize(pftcc, match_imgs(1), 1, isptcl=.false., iseven=.false.)
+        call b%img_crop_polarizer%polarize(pftcc, match_imgs(1), 1, isptcl=.false., iseven=.false., mask2D=pmask2D)
         call pftcc%memoize_refs
     end subroutine restore_read_polarize_cavgs
 

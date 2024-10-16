@@ -37,8 +37,8 @@ contains
         shvec      = s%prev_shvec
         shvec_incr = 0.
         if( s%doshift ) then
-            shvec_incr = sh
-            shvec      = shvec + shvec_incr
+            shvec_incr = sh - s%prev_shvec
+            shvec      = sh
         end if
         where( abs(shvec) < 1e-6 ) shvec = 0.
         call build_glob%spproj_field%set_shift(s%iptcl, shvec)
@@ -133,8 +133,7 @@ contains
         l_multistates = s%nstates > 1
         do ipeak = 1, s%npeaks
             call s%opeaks%set_euler(ipeak, s3D%proj_space_euls(:,refs(ipeak),s%ithr))
-            shvec = s%prev_shvec
-            if( s%doshift ) shvec = shvec + s3D%proj_space_shift(:,refs(ipeak),s%ithr)
+            if( s%doshift ) shvec = s3D%proj_space_shift(:,refs(ipeak),s%ithr)
             where( abs(shvec) < 1e-6 ) shvec = 0.
             call s%opeaks%set_shift(ipeak, shvec)
             state = 1

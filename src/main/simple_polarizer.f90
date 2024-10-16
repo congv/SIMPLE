@@ -154,7 +154,7 @@ contains
 
     !> \brief  creates the polar Fourier transform from self
     !!         KEEP THIS ROUTINE SERIAL
-    subroutine polarize_1( self, pftcc, img_ind, isptcl, iseven, mask )
+    subroutine polarize_1( self, pftcc, img_ind, isptcl, iseven, mask, mask2D )
         use simple_polarft_corrcalc, only: polarft_corrcalc
         class(polarizer),        intent(in)    :: self    !< projector instance
         class(polarft_corrcalc), intent(inout) :: pftcc   !< polarft_corrcalc object to be filled
@@ -162,12 +162,13 @@ contains
         logical,                 intent(in)    :: isptcl  !< is ptcl (or reference)
         logical,                 intent(in)    :: iseven  !< is even (or odd)
         logical, optional,       intent(in)    :: mask(:) !< interpolation mask, all .false. set to CMPLX_ZERO
-        call self%polarize_2(pftcc, self, img_ind, isptcl, iseven, mask )
+        logical, optional,       intent(in)    :: mask2D(:,:)
+        call self%polarize_2(pftcc, self, img_ind, isptcl, iseven, mask, mask2D )
     end subroutine polarize_1
 
     !> \brief  creates the polar Fourier transform from a given image
     !!         KEEP THIS ROUTINE SERIAL
-    subroutine polarize_2( self, pftcc, img, img_ind, isptcl, iseven, mask )
+    subroutine polarize_2( self, pftcc, img, img_ind, isptcl, iseven, mask, mask2D )
         use simple_polarft_corrcalc, only: polarft_corrcalc
         class(polarizer),        intent(in)    :: self    !< projector instance
         class(polarft_corrcalc), intent(inout) :: pftcc   !< polarft_corrcalc object to be filled
@@ -176,6 +177,7 @@ contains
         logical,                 intent(in)    :: isptcl  !< is ptcl (or reference)
         logical,                 intent(in)    :: iseven  !< is even (or odd)
         logical, optional,       intent(in)    :: mask(:) !< interpolation mask, all .false. set to CMPLX_ZERO
+        logical, optional,       intent(in)    :: mask2D(:,:)
         complex, pointer :: pft(:,:)
         complex :: fcomps(1:self%wdim,1:self%wdim)
         integer :: i, k, l, m, addr_l
@@ -197,6 +199,14 @@ contains
             ! band masking
             do k=self%pdim(2),self%pdim(3)
                 if( .not.mask(k) ) pft(:,k) = CMPLX_ZERO
+            enddo
+        endif
+        if( present(mask2D) )then
+            ! band masking
+            do k=self%pdim(2),self%pdim(3)
+                do i=1,self%pdim(1)
+                    if( .not.mask2D(i,k) ) pft(i,k) = CMPLX_ZERO
+                enddo
             enddo
         endif
         if( isptcl )then

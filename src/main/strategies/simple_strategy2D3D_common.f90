@@ -386,6 +386,9 @@ contains
         if( params_glob%gridding.eq.'yes' ) call build_glob%img_crop_polarizer%div_by_instrfun(img_out)
         ! return to Fourier space
         call img_out%fft()
+        if(abs(x) > SHTHRESH .or. abs(y) > SHTHRESH)then
+            call img_out%shift2Dserial([x,y])
+        endif
     end subroutine prepimg4align
 
     !>  \brief  prepares one cluster centre image for alignment

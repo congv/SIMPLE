@@ -95,7 +95,7 @@ contains
         self%prev_class = nint(build_glob%spproj_field%get(self%iptcl,'class'))                ! class index
         self%prev_rot   = pftcc_glob%get_roind(360.-build_glob%spproj_field%e3get(self%iptcl)) ! in-plane angle index
         self%prev_shvec = build_glob%spproj_field%get_2Dshift(self%iptcl)                      ! shift vector
-        self%best_shvec = 0.
+        self%best_shvec = self%prev_shvec
         if( self%prev_class > 0 )then
             if( s2D%cls_pops(self%prev_class) > 0 )then
                 ! all done
@@ -117,7 +117,7 @@ contains
         self%best_class = self%prev_class
         self%best_rot   = self%prev_rot
         ! calculate previous best corr (treshold for better)
-        call pftcc_glob%gencorrs(self%prev_class, self%iptcl, corrs)
+        call pftcc_glob%gencorrs(self%prev_class, self%iptcl, self%prev_shvec, corrs)
         if( params_glob%cc_objfun == OBJFUN_CC )then
             self%prev_corr  = max(0., corrs(self%prev_rot))
         else
@@ -134,7 +134,7 @@ contains
         class(strategy2D_srch), intent(inout) :: self
         real    :: cxy(3), rotmat(2,2)
         integer :: irot
-        self%best_shvec = [0.,0.]
+        self%best_shvec = self%prev_shvec
         if( .not. self%l_sh_first ) return
         ! BFGS
         irot = 0
@@ -144,7 +144,7 @@ contains
             irot = self%prev_rot
         endif
         cxy = self%grad_shsrch_first_obj%minimize(irot=irot, sh_rot=.false.)
-        if( irot == 0 ) cxy(2:3) = 0.
+        if( irot == 0 ) cxy(2:3) = self%prev_shvec
         self%xy_first = cxy(2:3)
         self%xy_first_rot = 0.
         if( irot > 0 )then
@@ -163,7 +163,7 @@ contains
         real    :: cxy(3)
         integer :: irot
         irot = 0
-        self%best_shvec = [0.,0.]
+        self%best_shvec = self%prev_shvec
         if( s2D%do_inplsrch(self%iptcl_map) )then
             ! BFGS
             call self%grad_shsrch_obj%set_indices(self%best_class, self%iptcl)
@@ -210,8 +210,8 @@ contains
         endif
         ! update parameters
         call build_glob%spproj_field%e3set(self%iptcl,e3)
-        call build_glob%spproj_field%set_shift(self%iptcl, self%prev_shvec + self%best_shvec)
-        call build_glob%spproj_field%set(self%iptcl, 'shincarg',   arg(self%best_shvec))
+        call build_glob%spproj_field%set_shift(self%iptcl,         self%best_shvec)
+        call build_glob%spproj_field%set(self%iptcl, 'shincarg',   arg(self%best_shvec - self%prev_shvec))
         call build_glob%spproj_field%set(self%iptcl, 'inpl',       real(self%best_rot))
         call build_glob%spproj_field%set(self%iptcl, 'class',      real(self%best_class))
         call build_glob%spproj_field%set(self%iptcl, 'corr',       self%best_corr)
