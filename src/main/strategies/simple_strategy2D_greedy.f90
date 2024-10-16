@@ -46,7 +46,7 @@ contains
                 if( self%s%l_sh_first )then
                     call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%xy_first, corrs)
                 else
-                    call pftcc_glob%gencorrs(iref, self%s%iptcl, corrs)
+                    call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%prev_shvec, corrs)
                 endif
                 inpl_ind  = maxloc(corrs, dim=1)
                 inpl_corr = corrs(inpl_ind)
@@ -63,7 +63,7 @@ contains
                 if( self%s%l_sh_first )then
                     call pftcc_glob%gencorrs(self%s%best_class, self%s%iptcl, self%s%xy_first, corrs, kweight=.true.)
                 else
-                    call pftcc_glob%gencorrs(self%s%best_class, self%s%iptcl, corrs, kweight=.true.)
+                    call pftcc_glob%gencorrs(self%s%best_class, self%s%iptcl, self%s%prev_shvec, corrs, kweight=.true.)
                 endif
                 self%s%best_rot  = maxloc(corrs, dim=1)
                 self%s%best_corr = corrs(inpl_ind)

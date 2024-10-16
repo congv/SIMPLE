@@ -55,7 +55,7 @@ contains
                 if( self%s%l_sh_first )then
                     call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%xy_first, inpl_corrs)
                 else
-                    call pftcc_glob%gencorrs(iref, self%s%iptcl, inpl_corrs)
+                    call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%prev_shvec, inpl_corrs)
                 endif
                 call squared_sampling( self%s%nrots, inpl_corrs, vec_nrots,&
                                         &s2D%snhc_smpl_ninpl, inpl_ind, order_ind, inpl_corr )
@@ -81,10 +81,10 @@ contains
                             cxy(2:3) = self%s%xy_first_rot
                         endif
                     else
-                        cxy = self%s%grad_shsrch_obj2%minimize(irot=inpl_ind)
+                        cxy = self%s%grad_shsrch_obj2%minimize(irot=inpl_ind, xy_in=self%s%prev_shvec)
                         if( inpl_ind == 0 )then
                             inpl_ind = cls_inpl_inds(iref)
-                            cxy      = [real(pftcc_glob%gencorr_for_rot_8(iref, self%s%iptcl, inpl_ind)), 0.,0.]
+                            cxy      = [real(pftcc_glob%gencorr_for_rot_8(iref, self%s%iptcl, real(self%s%prev_shvec,dp), inpl_ind)), 0.,0.]
                         endif
                     endif
                     cls_corrs(iref) = cxy(1)

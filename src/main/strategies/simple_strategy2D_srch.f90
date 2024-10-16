@@ -143,7 +143,7 @@ contains
             ! shift-only optimization
             irot = self%prev_rot
         endif
-        cxy = self%grad_shsrch_first_obj%minimize(irot=irot, sh_rot=.false.)
+        cxy = self%grad_shsrch_first_obj%minimize(irot=irot, xy_in=self%prev_shvec, sh_rot=.false.)
         if( irot == 0 ) cxy(2:3) = self%prev_shvec
         self%xy_first = cxy(2:3)
         self%xy_first_rot = 0.
@@ -174,7 +174,7 @@ contains
             if( self%l_sh_first )then
                 cxy = self%grad_shsrch_obj%minimize(irot=irot, xy_in=self%xy_first)
             else
-                cxy = self%grad_shsrch_obj%minimize(irot=irot)
+                cxy = self%grad_shsrch_obj%minimize(irot=irot, xy_in=self%prev_shvec)
             endif
             if( irot > 0 )then
                 self%best_corr  = cxy(1)

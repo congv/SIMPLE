@@ -55,7 +55,7 @@ contains
                 if( self%s%l_sh_first )then
                     call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%xy_first, corrs)
                 else
-                    call pftcc_glob%gencorrs(iref, self%s%iptcl, corrs)
+                    call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%prev_shvec, corrs)
                 endif
                 inpl_ind = shcloc(self%s%nrots, corrs, self%s%prev_corr)
                 if( inpl_ind == 0 )then
