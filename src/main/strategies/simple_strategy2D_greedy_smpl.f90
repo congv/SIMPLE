@@ -32,7 +32,7 @@ contains
     subroutine srch_greedy_smpl( self )
         use simple_eul_prob_tab, only: angle_sampling, eulprob_dist_switch
         class(strategy2D_greedy_smpl), intent(inout) :: self
-        integer :: refs_inds(self%s%nrefs), refs_inplinds(self%s%nrefs), inds(self%s%nrots)
+        integer :: refs_inds(self%s%nrefs), refs_inplinds(self%s%nrefs), inds(self%s%nrefs)
         integer :: iref, inpl_ind, isample, order_ind
         real    :: refs_corrs(self%s%nrefs), inpl_corrs(self%s%nrots), cxy(3)
         real    :: inpl_corr
@@ -54,14 +54,14 @@ contains
                     else
                         call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%prev_shvec, inpl_corrs)
                     endif
-                    call squared_sampling(self%s%nrots, inpl_corrs, inds,&
-                                        &s2D%smpl_ninpl, inpl_ind, order_ind, inpl_corr)
-                    refs_inplinds(iref) = inpl_ind
-                    refs_corrs(iref)    = inpl_corr
+                    refs_inplinds(iref) = maxloc(inpl_corrs,dim=1)
+                    refs_corrs(iref)    = inpl_corrs(refs_inplinds(iref))
                 endif
             enddo
-            self%s%best_class = maxloc(refs_corrs,dim=1)
-            self%s%best_corr  = refs_corrs(self%s%best_class)
+            call squared_sampling(self%s%nrefs, refs_corrs, inds,&
+                                 &self%s%nrefs, inpl_ind, order_ind, inpl_corr)
+            self%s%best_class = inpl_ind
+            self%s%best_corr  = inpl_corr
             self%s%best_rot   = refs_inplinds(self%s%best_class)
             ! Performs shift search for top scoring subset
             if( s2D%do_inplsrch(self%s%iptcl_map) )then
@@ -82,7 +82,8 @@ contains
                             cxy = self%s%grad_shsrch_obj2%minimize(irot=inpl_ind, xy_in=self%s%prev_shvec)
                             if( inpl_ind == 0 )then
                                 inpl_ind = refs_inplinds(iref)
-                                cxy      = [refs_corrs(isample), 0., 0.]
+                                cxy(1)   = refs_corrs(isample)
+                                cxy(2:3) = self%s%prev_shvec
                             endif
                         endif
                     else
@@ -98,7 +99,8 @@ contains
                             cxy = self%s%grad_shsrch_obj2%minimize(irot=inpl_ind, xy_in=self%s%prev_shvec)
                             if( inpl_ind == 0 )then
                                 inpl_ind = refs_inplinds(iref)
-                                cxy      = [real(pftcc_glob%gencorr_for_rot_8(iref, self%s%iptcl, real(self%s%prev_shvec,dp), inpl_ind)), 0.,0.]
+                                cxy(1)   = real(pftcc_glob%gencorr_for_rot_8(iref, self%s%iptcl, real(self%s%prev_shvec,dp), inpl_ind))
+                                cxy(2:3) = self%s%prev_shvec
                             endif
                         endif
                     endif
