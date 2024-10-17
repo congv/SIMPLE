@@ -81,9 +81,9 @@ contains
             call self%grad_shsrch_obj%new(lims, lims_init=lims_init,&
             maxits=params_glob%maxits_sh)
             call self%grad_shsrch_first_obj%new(lims, lims_init=lims_init,&
-            maxits=params_glob%maxits_sh, coarse_init=.true.)
+            maxits=params_glob%maxits_sh)
         endif
-        call self%grad_shsrch_obj2%new(lims, lims_init=lims_init, maxits=params_glob%maxits_sh, opt_angle=.false.)
+        call self%grad_shsrch_obj2%new(lims, lims_init=lims_init, maxits=params_glob%maxits_sh)
     end subroutine new
 
     subroutine prep4srch( self )

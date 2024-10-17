@@ -195,7 +195,7 @@ contains
             character(len=:), allocatable :: sh_first, refine, center, objfun, refs, icm
             integer :: iphase, iter, imaxits, maxits_glob, cc_iters, minits, extr_iter
             real    :: trs, snr_noise_reg, lambda
-            refine = 'snhc_smpl' ! not optional
+            refine = 'greedy_smpl' ! not optional
             ! iteration number bookkeeping
             iter = 0
             if( cline_cluster2D%defined('endit') ) iter = nint(cline_cluster2D%get_rarg('endit'))
