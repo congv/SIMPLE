@@ -58,7 +58,7 @@ contains
                     refs_corrs(iref)    = inpl_corrs(refs_inplinds(iref))
                 endif
             enddo
-            call squared_sampling(self%s%nrefs, refs_corrs, inds,&
+            call squared_sampling(self%s%nrefs, refs_corrs, refs_inds,&
                                  &self%s%nrefs, inpl_ind, order_ind, inpl_corr)
             self%s%best_class = inpl_ind
             self%s%best_corr  = inpl_corr
