@@ -59,10 +59,10 @@ contains
                     &[self%spec%eulprob_obj_part%assgn_map(iptcl_map)%x,&
                     & self%spec%eulprob_obj_part%assgn_map(iptcl_map)%y], corr)
                 else
-                    call assign_ori(self%s, iref, irot, corr, [0.,0.], corr)
+                    call assign_ori(self%s, iref, irot, corr, self%s%prev_shvec, corr)
                 endif
             else
-                call assign_ori(self%s, iref, irot, corr, [0.,0.], corr)
+                call assign_ori(self%s, iref, irot, corr, self%s%prev_shvec, corr)
             endif
         else
             call build_glob%spproj_field%reject(self%s%iptcl)

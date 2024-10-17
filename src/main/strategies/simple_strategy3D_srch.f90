@@ -172,8 +172,8 @@ contains
         ! BFGS over shifts with in-plane rot exhaustive callback
         irot = self%prev_roind
         call self%grad_shsrch_first_obj%set_indices(self%prev_ref, self%iptcl)
-        cxy = self%grad_shsrch_first_obj%minimize(irot=irot, sh_rot=.false.)
-        if( irot == 0 ) cxy(2:3) = 0.
+        cxy = self%grad_shsrch_first_obj%minimize(irot=irot, sh_rot=.false., xy_in=self%prev_shvec)
+        if( irot == 0 ) cxy(2:3) = self%prev_shvec
         self%xy_first = cxy(2:3)
         self%xy_first_rot = 0.
         if( irot > 0 )then
@@ -202,7 +202,7 @@ contains
         if( params_glob%l_sh_first )then
             cxy = self%grad_shsrch_obj%minimize(irot=irot, xy_in=self%xy_first)
         else
-            cxy = self%grad_shsrch_obj%minimize(irot=irot)
+            cxy = self%grad_shsrch_obj%minimize(irot=irot, xy_in=self%prev_shvec)
         endif
         if( irot > 0 ) call self%store_solution(iref, irot, cxy(1), sh=cxy(2:3))
     end subroutine inpl_srch
@@ -219,7 +219,7 @@ contains
             if( params_glob%l_sh_first )then
                 cxy = self%grad_shsrch_obj%minimize(irot=irot, xy_in=self%xy_first)
             else
-                cxy = self%grad_shsrch_obj%minimize(irot=irot)
+                cxy = self%grad_shsrch_obj%minimize(irot=irot, xy_in=self%prev_shvec)
             endif
             if( irot > 0 )then
                 ! irot > 0 guarantees improvement found, update solution

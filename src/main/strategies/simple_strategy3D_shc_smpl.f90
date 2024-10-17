@@ -54,9 +54,9 @@ contains
                 iref = s3D%srch_order(isample,self%s%ithr)  ! set the stochastic reference index
                 if( s3D%state_exists(s3D%proj_space_state(iref)) )then
                     if( params_glob%l_sh_first )then
-                        call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%xy_first, inpl_corrs)
+                        call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%xy_first,   inpl_corrs)
                     else
-                        call pftcc_glob%gencorrs(iref, self%s%iptcl, inpl_corrs)
+                        call pftcc_glob%gencorrs(iref, self%s%iptcl, self%s%prev_shvec, inpl_corrs)
                     endif
                     loc = angle_sampling(eulprob_dist_switch(inpl_corrs), sorted_corrs, inds, s3D%smpl_inpl_athres(s3D%proj_space_state(iref)))
                     call self%s%store_solution(iref, loc(1), inpl_corrs(loc(1)))
