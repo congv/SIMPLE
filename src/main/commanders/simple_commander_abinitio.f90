@@ -50,8 +50,8 @@ real,             parameter :: CENLP_DEFAULT        = 30.
 real,             parameter :: LPSYMSRCH_LB         = 12.
 integer,          parameter :: NSTAGES              = 8
 integer,          parameter :: PHASES(3)            = [2,6,8]
-integer,          parameter :: MAXITS(3)            = [20,15,10]
-integer,          parameter :: MAXITS_GLOB          = 2 * 20 + 4 * 15 + 2 * 10
+integer,          parameter :: MAXITS(3)            = [10,10,10]
+integer,          parameter :: MAXITS_GLOB          = 2 * MAXITS(1) + 4 * MAXITS(2) + 2 * MAXITS(3)
 integer,          parameter :: NSPACE(3)            = [500,1000,2500]
 integer,          parameter :: SYMSRCH_STAGE        = 3
 integer,          parameter :: PROBREFINE_STAGE     = 5
@@ -577,25 +577,25 @@ contains
                 sh_first      = 'no'
                 ml_reg        = 'no'
                 icm           = 'no'
-                snr_noise_reg = 2.0
+                snr_noise_reg = 0.0
             case(2)
                 inspace       = NSPACE(2)
                 imaxits       = MAXITS(2)
                 silence_fsc   = 'yes'
                 trs           = lpinfo(istage)%trslim
                 sh_first      = 'yes'
-                ml_reg        = 'yes'
+                ml_reg        = 'no'
                 icm           = 'no'
-                snr_noise_reg = 4.0
+                snr_noise_reg = 0.0
             case(3)
                 inspace       = NSPACE(3)
                 imaxits       = MAXITS(3)
                 silence_fsc   = 'no'
                 trs           = lpinfo(istage)%trslim
                 sh_first      = 'yes'
-                ml_reg        = 'yes'
-                icm           = 'yes'
-                snr_noise_reg = 6.0
+                ml_reg        = 'no'
+                icm           = 'no'
+                snr_noise_reg = 0.0
         end select
         ! symmetry
         if( l_srch4symaxis )then
@@ -608,8 +608,8 @@ contains
         endif
         ! refinement mode
         if( istage < PROBREFINE_STAGE )then
-            refine  = 'shc_smpl'
-            prob_sh = 'no'
+            refine  = 'prob'
+            prob_sh = 'yes'
         else
             refine  = 'prob'
             prob_sh = 'yes'

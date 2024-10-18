@@ -171,7 +171,7 @@ contains
             lims_init(:,2) =  SHC_INPL_TRSHWDTH
             do ithr = 1,nthr_glob
                 call grad_shsrch_obj(ithr)%new(lims, lims_init=lims_init, shbarrier=params_glob%shbarrier,&
-                    &maxits=params_glob%maxits_sh, opt_angle=.true., coarse_init=.true.)
+                    &maxits=params_glob%maxits_sh, opt_angle=.true.)
             end do
             ! fill the table
             do istate = 1, self%nstates
