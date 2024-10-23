@@ -45,8 +45,8 @@ end type abinitio_3Dmodel2_commander
 character(len=*), parameter :: REC_FBODY         = 'rec_final_state'
 character(len=*), parameter :: STR_STATE_GLOB    = '01'
 real,             parameter :: LPSTART_LB        = 10.
-real,             parameter :: LPSTART_DEFAULT   = 20.
-real,             parameter :: LPSTOP_LB         = 6.
+real,             parameter :: LPSTART_DEFAULT   = 15.
+real,             parameter :: LPSTOP_LB         = 8.
 real,             parameter :: CENLP_DEFAULT     = 30.
 real,             parameter :: LPSYMSRCH_LB      = 12.
 integer,          parameter :: NSTAGES           = 8
@@ -56,7 +56,6 @@ integer,          parameter :: MAXITS_GLOB       = 2*20 + 4*17 + 2*15
 integer,          parameter :: NSPACE(3)         = [500,1000,2500]
 integer,          parameter :: SYMSRCH_STAGE     = 3
 integer,          parameter :: PROBREFINE_STAGE  = 5
-integer,          parameter :: ICM_STAGE         = 5
 integer,          parameter :: TRAILREC_STAGE    = 7
 ! class variables
 type(lp_crop_inf), allocatable :: lpinfo(:)
@@ -100,11 +99,8 @@ contains
         call params%new(cline)
         call cline%set('mkdir',       'no')   ! to avoid nested directory structure
         call cline%set('oritype', 'ptcl3D')   ! from now on we are in the ptcl3D segment, final report is in the cls3D segment
-        ! set class global ICM regularization flag
-        l_icm_reg = .true.
-        if( cline%defined('icm') )then
-            l_icm_reg = params%l_icm   
-        endif
+        ! set class globnal ICM regularization flag
+        l_icm_reg = params%l_icm
         ! prepare class command lines
         call prep_class_command_lines(cline, work_projfile)
         ! set symmetry class variables
@@ -342,11 +338,8 @@ contains
         ! make master parameters
         call params%new(cline)
         call cline%set('mkdir', 'no')
-        ! set class global ICM regularization flag
-        l_icm_reg = .true.
-        if( cline%defined('icm') )then
-            l_icm_reg = params%l_icm
-        endif
+        ! set class globnal ICM regularization flag
+        l_icm_reg = params%l_icm
         ! prepare class command lines
         call prep_class_command_lines(cline, params%projfile)
         ! set symmetry class variables
@@ -547,7 +540,7 @@ contains
         filtsz = clsfrcs%get_filtsz()
         allocate(frcs_avg(filtsz), source=0.)
         states = nint(spproj%os_cls2D%get_all('state'))
-        call clsfrcs%avg_frc_getter(frcs_avg, states)
+        call clsfrcs%avg_frc_getter(frcs_avg, states, cur_oris=spproj%os_ptcl2D)
         if( allocated(lpinfo) ) deallocate(lpinfo)
         allocate(lpinfo(NSTAGES))
         lpfinal = max(LPSTOP_LB,calc_lplim_final_stage(3))
@@ -595,23 +588,17 @@ contains
         endif
         ! refinement mode
         if( istage < PROBREFINE_STAGE )then
-            refine    = 'shc_smpl'
-            prob_sh   = 'no'
+            refine  = 'shc_smpl'
+            prob_sh = 'no'
         else
-            refine    = 'prob'
-            prob_sh   = 'yes'
-        endif
-        ! ICM regularization
-        if( istage < ICM_STAGE )then
-            icm       = 'no'
-        else
-            icm       = 'yes'
+            refine  = 'prob'
+            prob_sh = 'yes'
         endif
         ! balance
         if( l_update_frac )then
-            balance   = 'yes'
+            balance = 'yes'
         else
-            balance   = 'no'
+            balance = 'no'
         endif
         ! trailing reconstruction
         if( istage >= TRAILREC_STAGE .and. l_update_frac )then
@@ -638,6 +625,7 @@ contains
                 trs           = 0.
                 sh_first      = 'no'
                 ml_reg        = 'no'
+                icm           = 'no'
                 greediness    = 2. ! completely greedy balanced sampling based on objective function value
                 snr_noise_reg = 2.0
             case(2)
@@ -647,6 +635,7 @@ contains
                 trs           = lpinfo(istage)%trslim
                 sh_first      = 'yes'
                 ml_reg        = 'yes'
+                icm           = 'no'
                 greediness    = 1.0 ! sample first half of each class as the best ones and the rest randomly
                 snr_noise_reg = 4.0
             case(3)
@@ -656,6 +645,11 @@ contains
                 trs           = lpinfo(istage)%trslim
                 sh_first      = 'yes'
                 ml_reg        = 'yes'
+                if( l_icm_reg )then
+                icm           = 'yes'
+                else
+                icm           = 'no'
+                endif
                 greediness    = 0.0 ! completely random balanced sampling (only class assignment matters)
                 snr_noise_reg = 6.0
         end select

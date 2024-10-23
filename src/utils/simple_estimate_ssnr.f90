@@ -234,9 +234,9 @@ contains
             call print_lpinfo
         endif
         ! (4) gather low-pass limit information
-        if( all(lpinfo(:)%l_lpset) )then
-            ! nothing to do
-        else
+        ! if( all(lpinfo(:)%l_lpset) )then
+        !     ! nothing to do
+        ! else
 
             print *, 'reverting to linear scheme'
 
@@ -247,7 +247,7 @@ contains
                 lpinfo(istage)%lp      = lpinfo(istage-1)%lp - (lpinfo(istage-1)%lp - lpfinal) / 2.
                 lpinfo(istage)%l_lpset = .true.
             end do
-        endif
+        ! endif
         if( l_verbose )then
             print *, '########## 2nd pass'
             call print_lpinfo

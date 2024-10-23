@@ -53,11 +53,7 @@ contains
         if(.not. dir_exists(trim(adjustl(cline%get_carg("import_dir"))))) THROW_HARD('import_dir does not exist ' // trim(adjustl(cline%get_carg("import_dir"))))
         if(cline%defined("starfile") .and. .not. file_exists(trim(adjustl(cline%get_carg("starfile"))))) THROW_HARD('starfile does not exist')
         call params%new(cline)
-        if( file_exists(params%projfile) )then
-            call spproj%read(params%projfile)
-        else
-            THROW_HARD('Inputted projfile: '//trim(params%projfile)//' does not exist!')
-        endif 
+        call spproj%read(params%projfile)
         !relative path -> absolute
         if(.not. index(cline%get_carg("import_dir"), "/") == 1) then
             call simple_getcwd(cwd)
