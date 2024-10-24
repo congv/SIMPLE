@@ -51,8 +51,7 @@ type :: polarft_corrcalc
     integer                          :: ldim(3)    = 0              !< logical dimensions of original cartesian image
     integer                          :: kfromto(2)                  !< band-pass Fourier index limits
     integer                          :: nk                          !< number of shells used durring alignement
-    logical,             allocatable :: pftsz_mask(:), k_mask(:)
-    integer,             allocatable :: pftsz_inds(:), k_inds(:)
+    logical,             allocatable :: pftsz_mask(:,:)
     integer,             allocatable :: pinds(:)                    !< index array (to reduce memory when frac_update < 1)
     real,                allocatable :: npix_per_shell(:)           !< number of (cartesian) pixels per shell
     real(dp),            allocatable :: sqsums_ptcls(:)             !< memoized square sums for the correlation calculations (taken from kfromto(1):kfromto(2))
@@ -295,11 +294,8 @@ contains
                     &self%pfts_drefs_odd (self%pftsz,self%kfromto(1):self%kfromto(2),3,params_glob%nthr),&
                     &self%pfts_ptcls(self%pftsz,self%kfromto(1):self%kfromto(2),1:self%nptcls),&
                     &self%sqsums_ptcls(1:self%nptcls),self%ksqsums_ptcls(1:self%nptcls),self%wsqsums_ptcls(1:self%nptcls),&
-                    &self%heap_vars(params_glob%nthr),self%pftsz_mask(self%pftsz),self%k_mask(self%kfromto(1):self%kfromto(2)))
+                    &self%heap_vars(params_glob%nthr),self%pftsz_mask(self%pftsz,self%kfromto(1):self%kfromto(2)))
         self%pftsz_mask = .true.
-        self%k_mask     = .true.
-        self%pftsz_inds = (/(i,i=1,self%pftsz)/)
-        self%k_inds     = (/(i,i=self%kfromto(1),self%kfromto(2))/)
         do ithr=1,params_glob%nthr
             allocate(self%heap_vars(ithr)%pft_ref(self%pftsz,self%kfromto(1):self%kfromto(2)),&
                 &self%heap_vars(ithr)%pft_ref_tmp(self%pftsz,self%kfromto(1):self%kfromto(2)),&
@@ -425,33 +421,13 @@ contains
 
     subroutine rnd_pftsz_k_mask( self )
         class(polarft_corrcalc), intent(inout) :: self
-        integer :: i, cnt
+        integer :: i,k
+        call seed_rnd
         self%pftsz_mask = .true.
-        self%k_mask     = .true.
-        if( allocated(self%pftsz_inds) ) deallocate(self%pftsz_inds,self%k_inds)
-        do i = 1, self%pftsz
-            if( ran3() > .9 ) self%pftsz_mask(i) = .false.
-        enddo
-        do i = self%kfromto(1), self%kfromto(2)
-            if( ran3() > 1. ) self%k_mask(i)     = .false.
-        enddo
-        cnt = count(self%pftsz_mask .eqv. .true.)
-        allocate(self%pftsz_inds(cnt))
-        cnt = 0
-        do i = 1, self%pftsz
-            if( self%pftsz_mask(i) )then
-                cnt = cnt + 1
-                self%pftsz_inds(cnt) = i
-            endif
-        enddo
-        cnt = count(self%k_mask .eqv. .true.)
-        allocate(self%k_inds(cnt))
-        cnt = 0
-        do i = self%kfromto(1), self%kfromto(2)
-            if( self%k_mask(i) )then
-                cnt = cnt + 1
-                self%k_inds(cnt) = i
-            endif
+        do k = self%kfromto(1), self%kfromto(2)
+            do i = 1, self%pftsz
+                if( ran3() > 1. ) self%pftsz_mask(i,k) = .false.
+            enddo
         enddo
     end subroutine rnd_pftsz_k_mask
 
@@ -793,8 +769,7 @@ contains
         self%ksqsums_ptcls(i) = 0.d0
         if( l_sigma ) self%wsqsums_ptcls(i) = 0.d0
         do ik = self%kfromto(1),self%kfromto(2)
-            if( .not. self%k_mask(ik) ) cycle
-            sumsqk                = sum(real(self%pfts_ptcls(self%pftsz_inds,ik,i)*conjg(self%pfts_ptcls(self%pftsz_inds,ik,i)),dp))
+            sumsqk                = sum(real(self%pfts_ptcls(findloc(self%pftsz_mask(:,ik), .true.),ik,i)*conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,ik), .true.),ik,i)),dp))
             self%sqsums_ptcls(i)  = self%sqsums_ptcls(i) + sumsqk
             sumsqk                = real(ik,dp) * sumsqk
             self%ksqsums_ptcls(i) = self%ksqsums_ptcls(i) + sumsqk
@@ -925,19 +900,13 @@ contains
         !$omp parallel do collapse(2) private(i,k,ithr) default(shared) proc_bind(close) schedule(static)
         do i = 1,self%nptcls
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) )then
-                    self%ft_ptcl_ctf(k,i)%c   = 0.
-                    self%ft_ctf2(k,i)%c       = 0.
-                    if( l_memoize_pctf2_ctf2 ) self%ft_ptcl2_ctf2(k,i)%c = 0.
-                    cycle
-                endif
                 ithr = omp_get_thread_num() + 1
                 ! FT(X.CTF)
                 self%cvec2(ithr)%c = 0.
                 if( self%with_ctf )then
-                    self%cvec2(ithr)%c(self%pftsz_inds) = self%pfts_ptcls(self%pftsz_inds,k,i) * self%ctfmats(self%pftsz_inds,k,i)
+                    self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.)) = self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i) * self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)
                 else
-                    self%cvec2(ithr)%c(self%pftsz_inds) = self%pfts_ptcls(self%pftsz_inds,k,i)
+                    self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.)) = self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)
                 endif
                 self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
                 call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
@@ -945,9 +914,9 @@ contains
                 ! FT(CTF2)
                 self%rvec1(ithr)%r = 0.
                 if( self%with_ctf )then
-                    self%rvec1(ithr)%r(self%pftsz_inds) = self%ctfmats(self%pftsz_inds,k,i)*self%ctfmats(self%pftsz_inds,k,i)
+                    self%rvec1(ithr)%r(findloc(self%pftsz_mask(:,k), .true.)) = self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)*self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)
                 else
-                    self%rvec1(ithr)%r(self%pftsz_inds) = 1.
+                    self%rvec1(ithr)%r(findloc(self%pftsz_mask(:,k), .true.)) = 1.
                 endif
                 self%rvec1(ithr)%r(self%pftsz+1:self%nrots) = self%rvec1(ithr)%r(1:self%pftsz)
                 call fftwf_execute_dft_r2c(self%plan_mem_r2c, self%rvec1(ithr)%r, self%cvec1(ithr)%c)
@@ -955,9 +924,9 @@ contains
                 if( l_memoize_pctf2_ctf2 )then
                     self%cvec2(ithr)%c = 0.
                     if( self%with_ctf )then
-                        self%cvec2(ithr)%c(self%pftsz_inds) = real(self%pfts_ptcls(self%pftsz_inds,k,i)*conjg(self%pfts_ptcls(self%pftsz_inds,k,i))) * self%ctfmats(self%pftsz_inds,k,i)**2
+                        self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.)) = real(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)*conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i))) * self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)**2
                     else
-                        self%cvec2(ithr)%c(self%pftsz_inds) = real(self%pfts_ptcls(self%pftsz_inds,k,i)*conjg(self%pfts_ptcls(self%pftsz_inds,k,i)))
+                        self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.)) = real(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)*conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)))
                     endif
                     self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
                     call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
@@ -977,35 +946,28 @@ contains
         !$omp parallel do collapse(2) private(iref,k,ithr) default(shared) proc_bind(close) schedule(static)
         do iref = 1,self%nrefs
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) )then
-                    self%ft_ref_even(k,iref)%c  = 0.
-                    self%ft_ref_odd(k,iref)%c   = 0.
-                    self%ft_ref2_even(k,iref)%c = 0.
-                    self%ft_ref2_odd(k,iref)%c  = 0.
-                    cycle
-                endif
                 ithr = omp_get_thread_num() + 1
                 ! FT(REFeven)*
                 self%cvec2(ithr)%c                          = 0.
-                self%cvec2(ithr)%c(        self%pftsz_inds) = self%pfts_refs_even(self%pftsz_inds,k,iref)
+                self%cvec2(ithr)%c(        findloc(self%pftsz_mask(:,k), .true.)) = self%pfts_refs_even(findloc(self%pftsz_mask(:,k), .true.),k,iref)
                 self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
                 call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
                 self%ft_ref_even(k,iref)%c = conjg(self%cvec2(ithr)%c(1:self%pftsz+1))
                 ! FT(REFodd)*
                 self%cvec2(ithr)%c                          = 0.
-                self%cvec2(ithr)%c(        self%pftsz_inds) = self%pfts_refs_odd(self%pftsz_inds,k,iref)
+                self%cvec2(ithr)%c(        findloc(self%pftsz_mask(:,k), .true.)) = self%pfts_refs_odd(findloc(self%pftsz_mask(:,k), .true.),k,iref)
                 self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
                 call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
                 self%ft_ref_odd(k,iref)%c = conjg(self%cvec2(ithr)%c(1:self%pftsz+1))
                 ! FT(REF2even)*
                 self%rvec1(ithr)%r                          = 0.
-                self%rvec1(ithr)%r(        self%pftsz_inds) = real(self%pfts_refs_even(self%pftsz_inds,k,iref)*conjg(self%pfts_refs_even(self%pftsz_inds,k,iref)))
+                self%rvec1(ithr)%r(        findloc(self%pftsz_mask(:,k), .true.)) = real(self%pfts_refs_even(findloc(self%pftsz_mask(:,k), .true.),k,iref)*conjg(self%pfts_refs_even(findloc(self%pftsz_mask(:,k), .true.),k,iref)))
                 self%rvec1(ithr)%r(self%pftsz+1:self%nrots) = self%rvec1(ithr)%r(1:self%pftsz)
                 call fftwf_execute_dft_r2c(self%plan_mem_r2c, self%rvec1(ithr)%r, self%cvec1(ithr)%c)
                 self%ft_ref2_even(k,iref)%c = conjg(self%cvec1(ithr)%c(1:self%pftsz+1))
                 ! FT(REF2odd)*
                 self%rvec1(ithr)%r                          = 0.
-                self%rvec1(ithr)%r(        self%pftsz_inds) = real(self%pfts_refs_odd(self%pftsz_inds,k,iref)*conjg(self%pfts_refs_odd(self%pftsz_inds,k,iref)))
+                self%rvec1(ithr)%r(        findloc(self%pftsz_mask(:,k), .true.)) = real(self%pfts_refs_odd(findloc(self%pftsz_mask(:,k), .true.),k,iref)*conjg(self%pfts_refs_odd(findloc(self%pftsz_mask(:,k), .true.),k,iref)))
                 self%rvec1(ithr)%r(self%pftsz+1:self%nrots) = self%rvec1(ithr)%r(1:self%pftsz)
                 call fftwf_execute_dft_r2c(self%plan_mem_r2c, self%rvec1(ithr)%r, self%cvec1(ithr)%c)
                 self%ft_ref2_odd(k,iref)%c = conjg(self%cvec1(ithr)%c(1:self%pftsz+1))
@@ -1769,7 +1731,6 @@ contains
         if( self%with_ctf )then
             self%drvec(ithr)%r = 0.d0
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
                 ! FT(CTF2) x FT(REF2)*)
                 if( even )then
                     self%cvec1(ithr)%c(1:self%pftsz+1) = self%ft_ctf2(k,i)%c(1:self%pftsz+1) * self%ft_ref2_even(k,iref)%c(1:self%pftsz+1)
@@ -1800,9 +1761,8 @@ contains
             endif
             sqsumref = 0.d0
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
                 ! |REF|2
-                sqsumref = sqsumref + sum(real(pft_ref(self%pftsz_inds,k)*conjg(pft_ref(self%pftsz_inds,k)),dp))
+                sqsumref = sqsumref + sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)*conjg(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
                 ! FT(X.CTF) x FT(REF)*
                 if( even )then
                     self%cvec1(ithr)%c(1:self%pftsz+1) = self%ft_ptcl_ctf(k,i)%c(1:self%pftsz+1) * self%ft_ref_even(k,iref)%c(1:self%pftsz+1)
@@ -1832,7 +1792,6 @@ contains
         if( self%with_ctf )then
             self%drvec(ithr)%r = 0.d0
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
                 ! FT(CTF2) x FT(REF2)), REF2 is shift invariant
                 if( even )then
                     self%cvec1(ithr)%c = self%ft_ctf2(k,i)%c * self%ft_ref2_even(k,iref)%c
@@ -1844,7 +1803,7 @@ contains
                 self%drvec(ithr)%r = self%drvec(ithr)%r + real(self%rvec1(ithr)%r(1:self%nrots),dp)
                 ! FT(S.REF), shifted reference
                 self%cvec2(ithr)%c                          = 0.
-                self%cvec2(ithr)%c(self%pftsz_inds)         = pft_ref(self%pftsz_inds,k)
+                self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.))         = pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)
                 self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
                 call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
                 ! FT(X.CTF) x FT(S.REF)*
@@ -1858,12 +1817,11 @@ contains
         else
             sqsumref = 0.d0
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
                 ! |REF|2
-                sqsumref = sqsumref + sum(real(pft_ref(self%pftsz_inds,k)*conjg(pft_ref(self%pftsz_inds,k)),dp))
+                sqsumref = sqsumref + sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)*conjg(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
                 ! FT(S.REF), shifted reference
                 self%cvec2(ithr)%c                          = 0.
-                self%cvec2(ithr)%c(self%pftsz_inds)         = pft_ref(self%pftsz_inds,k)
+                self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.))         = pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)
                 self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
                 call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
                 ! FT(X) x FT(S.REF)*
@@ -1891,7 +1849,6 @@ contains
         if( self%with_ctf )then
             self%drvec(ithr)%r = 0.d0
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
                 ! FT(CTF2) x FT(REF2)*)
                 if( even )then
                     self%cvec1(ithr)%c(1:self%pftsz+1) = self%ft_ctf2(k,i)%c(1:self%pftsz+1) * self%ft_ref2_even(k,iref)%c(1:self%pftsz+1)
@@ -1922,9 +1879,8 @@ contains
             endif
             sqsumref = 0.d0
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
                 ! |REF|2
-                sqsumref = sqsumref + real(k,dp) * sum(real(pft_ref(self%pftsz_inds,k)*conjg(pft_ref(self%pftsz_inds,k)),dp))
+                sqsumref = sqsumref + real(k,dp) * sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)*conjg(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
                 ! FT(X) x FT(REF)*
                 if( even )then
                     self%cvec1(ithr)%c(1:self%pftsz+1) = self%ft_ptcl_ctf(k,i)%c(1:self%pftsz+1) * self%ft_ref_even(k,iref)%c(1:self%pftsz+1)
@@ -1954,7 +1910,6 @@ contains
         if( self%with_ctf )then
             self%drvec(ithr)%r = 0.d0
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
                 ! FT(CTF2) x FT(REF2)), REF2 is shift invariant
                 if( even )then
                     self%cvec1(ithr)%c = self%ft_ctf2(k,i)%c * self%ft_ref2_even(k,iref)%c
@@ -1966,7 +1921,7 @@ contains
                 self%drvec(ithr)%r = self%drvec(ithr)%r + real(k,dp) * real(self%rvec1(ithr)%r(1:self%nrots),dp)
                 ! FT(S.REF), shifted reference
                 self%cvec2(ithr)%c                          = 0.
-                self%cvec2(ithr)%c(self%pftsz_inds)         = pft_ref(self%pftsz_inds,k)
+                self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.))         = pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)
                 self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
                 call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
                 ! FT(X.CTF) x FT(S.REF)*
@@ -1980,12 +1935,11 @@ contains
         else
             sqsumref = 0.d0
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
                 ! |REF|2
-                sqsumref = sqsumref + real(k,dp) * sum(real(pft_ref(self%pftsz_inds,k)*conjg(pft_ref(self%pftsz_inds,k)),dp))
+                sqsumref = sqsumref + real(k,dp) * sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)*conjg(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
                 ! FT(S.REF), shifted reference
                 self%cvec2(ithr)%c                          = 0.
-                self%cvec2(ithr)%c(self%pftsz_inds)         = pft_ref(self%pftsz_inds,k)
+                self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.))         = pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)
                 self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
                 call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
                 ! FT(X) x FT(S.REF)*
@@ -2010,9 +1964,8 @@ contains
         even = self%iseven(i)
         self%heap_vars(ithr)%kcorrs = 0.d0
         do k = self%kfromto(1),self%kfromto(2)
-            if( .not. self%k_mask(k) ) cycle
             w         = real(k,dp) / real(self%sigma2_noise(k,iptcl),dp)
-            sumsqptcl = sum(real(self%pfts_ptcls(self%pftsz_inds,k,i)*conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+            sumsqptcl = sum(real(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)*conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
             ! FT(CTF2) x FT(REF2)*) - 2 * FT(X.CTF) x FT(REF)*
             if( even )then
                 self%cvec1(ithr)%c = self%ft_ctf2(k,i)%c    * self%ft_ref2_even(k,iref)%c - &
@@ -2044,9 +1997,8 @@ contains
         even = self%iseven(i)
         self%heap_vars(ithr)%kcorrs = 0.d0
         do k = self%kfromto(1),self%kfromto(2)
-            if( .not. self%k_mask(k) ) cycle
             w         = real(k,dp) / real(self%sigma2_noise(k,iptcl),dp)
-            sumsqptcl = sum(real(self%pfts_ptcls(self%pftsz_inds,k,i)*conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+            sumsqptcl = sum(real(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)*conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
             ! FT(CTF2) x FT(REF2)*
             if( even )then
                 self%cvec1(ithr)%c = self%ft_ctf2(k,i)%c * self%ft_ref2_even(k,iref)%c
@@ -2055,7 +2007,7 @@ contains
             endif
             ! FT(S.REF), shifted reference
             self%cvec2(ithr)%c                          = 0.
-            self%cvec2(ithr)%c(self%pftsz_inds)         = pft_ref(self%pftsz_inds,k)
+            self%cvec2(ithr)%c(findloc(self%pftsz_mask(:,k), .true.))         = pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)
             self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(self%cvec2(ithr)%c(1:self%pftsz))
             call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
             ! FT(CTF2) x FT(REF2)* - 2 * FT(X.CTF) x FT(REF)*
@@ -2220,16 +2172,14 @@ contains
         gencorr_cc_for_rot_8 = 0.d0
         if( params_glob%l_kweight_shift )then
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
-                sqsum_ref            = sqsum_ref +            real(k,kind=dp) * sum(real(pft_ref(self%pftsz_inds,k) * conjg(pft_ref(self%pftsz_inds,k)),dp))
-                gencorr_cc_for_rot_8 = gencorr_cc_for_rot_8 + real(k,kind=dp) * sum(real(pft_ref(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                sqsum_ref            = sqsum_ref +            real(k,kind=dp) * sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
+                gencorr_cc_for_rot_8 = gencorr_cc_for_rot_8 + real(k,kind=dp) * sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
             end do
             gencorr_cc_for_rot_8 = gencorr_cc_for_rot_8 / dsqrt(sqsum_ref * self%ksqsums_ptcls(i))
         else
             do k = self%kfromto(1),self%kfromto(2)
-                if( .not. self%k_mask(k) ) cycle
-                sqsum_ref            = sqsum_ref +            sum(real(pft_ref(self%pftsz_inds,k) * conjg(pft_ref(self%pftsz_inds,k)),dp))
-                gencorr_cc_for_rot_8 = gencorr_cc_for_rot_8 + sum(real(pft_ref(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                sqsum_ref            = sqsum_ref +            sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
+                gencorr_cc_for_rot_8 = gencorr_cc_for_rot_8 + sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
             end do
             gencorr_cc_for_rot_8 = gencorr_cc_for_rot_8 / dsqrt(sqsum_ref * self%sqsums_ptcls(i))
         endif
@@ -2244,9 +2194,8 @@ contains
         pft_ref = pft_ref - self%pfts_ptcls(:,:,i)
         gencorr_euclid_for_rot_8 = 0.d0
         do k = self%kfromto(1),self%kfromto(2)
-            if( .not. self%k_mask(k) ) cycle
             gencorr_euclid_for_rot_8 = gencorr_euclid_for_rot_8 +&
-                &(real(k,dp) / self%sigma2_noise(k,iptcl)) * sum(real(pft_ref(self%pftsz_inds,k)*conjg(pft_ref(self%pftsz_inds,k)),dp))
+                &(real(k,dp) / self%sigma2_noise(k,iptcl)) * sum(real(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)*conjg(pft_ref(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
         end do
         gencorr_euclid_for_rot_8 = dexp( -gencorr_euclid_for_rot_8 / self%wsqsums_ptcls(i) )
     end function gencorr_euclid_for_rot_8
@@ -2295,37 +2244,31 @@ contains
                 sqsum_ptcl = self%ksqsums_ptcls(i)
                 call self%rotate_ref(pft_ref, irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(self%ctfmats(self%pftsz_inds,k,i)*self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(    pft_ref_tmp(self%pftsz_inds,k)),dp))
-                    f         = f         + real(k,kind=dp) * sum(real(self%ctfmats(self%pftsz_inds,k,i)                                   * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)*self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(    pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
+                    f         = f         + real(k,kind=dp) * sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)                                   * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(1) = grad(1) + real(k,kind=dp) * sum(real(self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(1) = grad(1) + real(k,kind=dp) * sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(2) = grad(2) + real(k,kind=dp) * sum(real(self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(2) = grad(2) + real(k,kind=dp) * sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 end do
             else
                 sqsum_ptcl = self%sqsums_ptcls(i)
                 call self%rotate_ref(pft_ref, irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    sqsum_ref = sqsum_ref + sum(real(self%ctfmats(self%pftsz_inds,k,i)*self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(pft_ref_tmp(self%pftsz_inds,k)),dp))
-                    f         = f         + sum(real(self%ctfmats(self%pftsz_inds,k,i)                                   * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    sqsum_ref = sqsum_ref + sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)*self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
+                    f         = f         + sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)                                   * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(1) = grad(1) + sum(real(self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(1) = grad(1) + sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(2) = grad(2) + sum(real(self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(2) = grad(2) + sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 end do
             endif
         else
@@ -2333,37 +2276,31 @@ contains
                 sqsum_ptcl = self%ksqsums_ptcls(i)
                 call self%rotate_ref(pft_ref, irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(pft_ref_tmp(self%pftsz_inds,k)),dp))
-                    f         = f         + real(k,kind=dp) * sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
+                    f         = f         + real(k,kind=dp) * sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(1) = grad(1) + real(k,kind=dp) * sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(1) = grad(1) + real(k,kind=dp) * sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(2) = grad(2) + real(k,kind=dp) * sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(2) = grad(2) + real(k,kind=dp) * sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 end do
             else
                 sqsum_ptcl = self%sqsums_ptcls(i)
                 call self%rotate_ref(pft_ref, irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    sqsum_ref = sqsum_ref + sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(pft_ref_tmp(self%pftsz_inds,k)),dp))
-                    f         = f         + sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    sqsum_ref = sqsum_ref + sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
+                    f         = f         + sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(1) = grad(1) + sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(1) = grad(1) + sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(2) = grad(2) + sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(2) = grad(2) + sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 end do
             endif
         endif
@@ -2392,17 +2329,15 @@ contains
         call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
         if( self%with_ctf ) pft_ref_tmp = pft_ref_tmp * self%ctfmats(:,:,i)
         do k = self%kfromto(1),self%kfromto(2)
-            if( .not. self%k_mask(k) ) cycle
             w       = real(k,dp) / real(self%sigma2_noise(k,iptcl))
-            f       = f + w * sum(real(pft_diff(self%pftsz_inds,k)*conjg(pft_diff(self%pftsz_inds,k)),dp))
-            grad(1) = grad(1) + w * real(sum(pft_ref_tmp(self%pftsz_inds,k) * conjg(pft_diff(self%pftsz_inds,k))),dp)
+            f       = f + w * sum(real(pft_diff(findloc(self%pftsz_mask(:,k), .true.),k)*conjg(pft_diff(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
+            grad(1) = grad(1) + w * real(sum(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_diff(findloc(self%pftsz_mask(:,k), .true.),k))),dp)
         end do
         call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
         if( self%with_ctf ) pft_ref_tmp = pft_ref_tmp * self%ctfmats(:,:,i)
         do k = self%kfromto(1),self%kfromto(2)
-            if( .not. self%k_mask(k) ) cycle
             w      = real(k,dp) / real(self%sigma2_noise(k,iptcl))
-            grad(2) = grad(2) + w * real(sum(pft_ref_tmp(self%pftsz_inds,k) * conjg(pft_diff(self%pftsz_inds,k))),dp)
+            grad(2) = grad(2) + w * real(sum(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_diff(findloc(self%pftsz_mask(:,k), .true.),k))),dp)
         end do
         f    = dexp( -f / denom )
         grad = -f * 2.d0 * grad / denom
@@ -2451,35 +2386,29 @@ contains
                 sqsum_ptcl = self%ksqsums_ptcls(i)
                 call self%rotate_ref(pft_ref, irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(self%ctfmats(self%pftsz_inds,k,i)*self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(pft_ref_tmp(self%pftsz_inds,k)),dp))
+                    sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)*self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(1) = grad(1) + real(k,kind=dp) * sum(real(self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(1) = grad(1) + real(k,kind=dp) * sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(2) = grad(2) + real(k,kind=dp) * sum(real(self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(2) = grad(2) + real(k,kind=dp) * sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 end do
             else
                 sqsum_ptcl = self%sqsums_ptcls(i)
                 call self%rotate_ref(pft_ref, irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    sqsum_ref = sqsum_ref + sum(real(self%ctfmats(self%pftsz_inds,k,i)*self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(:,k) * conjg(pft_ref_tmp(self%pftsz_inds,k)),dp))
+                    sqsum_ref = sqsum_ref + sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i)*self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(:,k) * conjg(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(1) = grad(1) + sum(real(self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(1) = grad(1) + sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(2) = grad(2) + sum(real(self%ctfmats(self%pftsz_inds,k,i) * pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(2) = grad(2) + sum(real(self%ctfmats(findloc(self%pftsz_mask(:,k), .true.),k,i) * pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 end do
             endif
         else
@@ -2487,35 +2416,29 @@ contains
                 sqsum_ptcl = self%ksqsums_ptcls(i)
                 call self%rotate_ref(pft_ref, irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(pft_ref_tmp(self%pftsz_inds,k)),dp))
+                    sqsum_ref = sqsum_ref + real(k,kind=dp) * sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(1) = grad(1) + real(k,kind=dp) * sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(1) = grad(1) + real(k,kind=dp) * sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(2) = grad(2) + real(k,kind=dp) * sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(2) = grad(2) + real(k,kind=dp) * sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 end do
             else
                 sqsum_ptcl = self%sqsums_ptcls(i)
                 call self%rotate_ref(pft_ref, irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    sqsum_ref = sqsum_ref + sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(pft_ref_tmp(self%pftsz_inds,k)),dp))
+                    sqsum_ref = sqsum_ref + sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(:self%pftsz,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(1) = grad(1) + sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(1) = grad(1) + sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 enddo
                 call self%rotate_ref(pft_ref * dcmplx(0.d0,self%argtransf(self%pftsz+1:,:)), irot, pft_ref_tmp)
                 do k = self%kfromto(1),self%kfromto(2)
-                    if( .not. self%k_mask(k) ) cycle
-                    grad(2) = grad(2) + sum(real(pft_ref_tmp(self%pftsz_inds,k) * conjg(self%pfts_ptcls(self%pftsz_inds,k,i)),dp))
+                    grad(2) = grad(2) + sum(real(pft_ref_tmp(findloc(self%pftsz_mask(:,k), .true.),k) * conjg(self%pfts_ptcls(findloc(self%pftsz_mask(:,k), .true.),k,i)),dp))
                 end do
             endif
         endif
@@ -2775,7 +2698,7 @@ contains
             deallocate(self%sqsums_ptcls, self%ksqsums_ptcls, self%wsqsums_ptcls, self%angtab, self%argtransf,self%pfts_ptcls,&
                 &self%polar, self%pfts_refs_even, self%pfts_refs_odd, self%pfts_drefs_even, self%pfts_drefs_odd,&
                 &self%iseven, self%pinds, self%heap_vars, self%argtransf_shellone, self%norm_refs_even, self%norm_refs_odd,&
-                &self%pftsz_mask,self%pftsz_inds,self%k_mask,self%k_inds)
+                &self%pftsz_mask)
             call self%kill_memoized_ptcls
             call self%kill_memoized_refs
             nullify(self%sigma2_noise, pftcc_glob)

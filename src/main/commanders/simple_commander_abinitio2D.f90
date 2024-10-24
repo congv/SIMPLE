@@ -185,7 +185,7 @@ contains
             call cline_cluster2D%set('sigma_est', 'group')
             call cline_cluster2D%set('ptclw',     'no')
             call cline_cluster2D%set('ml_reg',    'no')
-            call cline_cluster2D%set('kweight',   'default')
+            call cline_cluster2D%set('kweight',   'all')
             call cline_cluster2D%set('cenlp',     params%cenlp)
             call set_automask2D_defaults( cline_cluster2D )
         end subroutine prep_command_lines
@@ -195,7 +195,7 @@ contains
             character(len=:), allocatable :: sh_first, refine, center, objfun, refs, icm
             integer :: iphase, iter, imaxits, cc_iters, minits, extr_iter
             real    :: trs, lambda
-            refine = 'greedy' ! not optional
+            refine = 'snhc' ! not optional
             ! iteration number bookkeeping
             iter = 0
             if( cline_cluster2D%defined('endit') ) iter = nint(cline_cluster2D%get_rarg('endit'))
@@ -219,9 +219,9 @@ contains
                 minits        = imaxits
                 select case(istage)
                 case(1)
-                    trs          = 0.
-                    sh_first     = 'no'
-                    center       = 'no'
+                    trs          = lpinfo(istage)%trslim
+                    sh_first     = trim(params%sh_first)
+                    center       = trim(params%center)
                     if( cline%defined('refs') )then
                         refs     = trim(params%refs)
                     else

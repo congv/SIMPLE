@@ -881,6 +881,7 @@ contains
         ! more prep
         call set_bp_range( cline )
         call pftcc%new(params%nspace * params%nstates, [1,nptcls], params%kfromto)
+        call pftcc%rnd_pftsz_k_mask
         call eulprob_obj_part%new(pinds)
         call prepimgbatch(nptcls)
         call discrete_read_imgbatch( nptcls, pinds, [1,nptcls] )

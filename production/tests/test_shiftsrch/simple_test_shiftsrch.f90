@@ -72,6 +72,7 @@ p%kfromto(2) = 40
 allocate( sigma2_noise(p%kfromto(1):p%kfromto(2), 1:N_PTCLS), source=1. )
 call b%build_general_tbox(p, cline)
 call pftcc%new(N_PTCLS, [1,N_PTCLS], p%kfromto)
+call pftcc%rnd_pftsz_k_mask
 call pftcc%assign_sigma2_noise(sigma2_noise)
 allocate(corrs(pftcc%get_nrots()), norm_const(pftcc%get_nrots(), 2))
 call img_copy%new([p%box_crop,p%box_crop,1],p%smpd_crop)
@@ -94,8 +95,6 @@ call img_copy%polarize(pftcc, b%img, 4, isptcl=.true.,  iseven=.true., mask=b%l_
 call pftcc%shift_ptcl(4, [0.,SHMAG,0.]) ! up
 call img_copy%polarize(pftcc, b%img, 5, isptcl=.false., iseven=.true., mask=b%l_resmsk)
 call img_copy%polarize(pftcc, b%img, 5, isptcl=.true.,  iseven=.true., mask=b%l_resmsk)
-call pftcc%gencorr_sigma_contrib(5,5,[SHMAG,SHMAG],1,sigma2_noise(:,5))
-call pftcc%assign_sigma2_noise(sigma2_noise)
 call pftcc%shift_ptcl(5, [SHMAG,SHMAG,0.]) ! left + down
 call img_copy%polarize(pftcc, b%img, 6, isptcl=.false., iseven=.true., mask=b%l_resmsk)
 call img_copy%polarize(pftcc, b%img, 6, isptcl=.true.,  iseven=.true., mask=b%l_resmsk)

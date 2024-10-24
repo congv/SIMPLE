@@ -45,8 +45,8 @@ end type abinitio_3Dmodel2_commander
 character(len=*), parameter :: REC_FBODY         = 'rec_final_state'
 character(len=*), parameter :: STR_STATE_GLOB    = '01'
 real,             parameter :: LPSTART_LB        = 10.
-real,             parameter :: LPSTART_DEFAULT   = 15.
-real,             parameter :: LPSTOP_LB         = 8.
+real,             parameter :: LPSTART_DEFAULT   = 10.
+real,             parameter :: LPSTOP_LB         = 6.
 real,             parameter :: CENLP_DEFAULT     = 30.
 real,             parameter :: LPSYMSRCH_LB      = 12.
 integer,          parameter :: NSTAGES           = 8
@@ -622,8 +622,8 @@ contains
                 inspace       = NSPACE(1)
                 imaxits       = MAXITS(1)
                 silence_fsc   = 'yes'
-                trs           = 0.
-                sh_first      = 'no'
+                trs           = lpinfo(istage)%trslim
+                sh_first      = 'yes'
                 ml_reg        = 'no'
                 icm           = 'no'
                 greediness    = 2. ! completely greedy balanced sampling based on objective function value
