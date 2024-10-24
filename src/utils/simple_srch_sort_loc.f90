@@ -436,6 +436,19 @@ contains
         enddo
     end function minnloc
 
+    function findnloc( rarr, n ) result( loc )
+        logical, intent(in) :: rarr(:)
+        integer, intent(in) :: n
+        integer :: loc(n), i, cnt
+        cnt = 0
+        do i = 1, size(rarr)
+            if( rarr(i) )then
+                cnt      = cnt + 1
+                loc(cnt) = i
+            endif
+        enddo
+    end function findnloc
+
     function peakfinder( vals ) result( peakpos )
         real,    intent(in)  :: vals(:)
         logical, allocatable :: peakpos(:)
