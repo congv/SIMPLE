@@ -157,11 +157,12 @@ contains
         integer,                 allocatable   :: locn(:)
         type(pftcc_shsrch_grad) :: grad_shsrch_obj(nthr_glob) !< origin shift search object, L-BFGS with gradient
         type(ori)               :: o_prev
-        integer :: i, j, iproj, iptcl, projs_ns, ithr, irot, inds_sorted(pftcc%nrots,nthr_glob), istate, iref_start, rots(params_glob%nspace,nthr_glob)
+        integer :: i, j, iproj, iptcl, projs_ns, ithr, irot, inds_sorted(pftcc%nrots,nthr_glob), istate, iref_start
+        integer :: proj_inds(params_glob%nspace,nthr_glob), rots(params_glob%nspace,nthr_glob)
         logical :: l_doshift
         real    :: dists_inpl(pftcc%nrots,nthr_glob), dists_inpl_sorted(pftcc%nrots,nthr_glob), rotmat(2,2)
         real    :: dists_projs(params_glob%nspace,nthr_glob), lims(2,2), lims_init(2,2), cxy(3), cxy_prob(3)
-        real    :: rot_xy(2), inpl_athres, min_dist, max_dist
+        real    :: rot_xy(2), inpl_athres, min_dist, max_dist, dists_sorted(params_glob%nspace,nthr_glob), projs_athres
         call seed_rnd
         if( params_glob%l_sh_first .and. params_glob%l_doshift )then
             ! make shift search objects
@@ -175,8 +176,9 @@ contains
             end do
             ! fill the table
             do istate = 1, self%nstates
-                iref_start  = (istate-1)*params_glob%nspace
-                inpl_athres = calc_athres('dist_inpl', state=istate)
+                projs_athres = calc_athres('dist', state=istate)
+                iref_start   = (istate-1)*params_glob%nspace
+                inpl_athres  = calc_athres('dist_inpl', state=istate)
                 call calc_num2sample(params_glob%nspace, 'dist', projs_ns, state=istate)
                 if( allocated(locn) ) deallocate(locn)
                 allocate(locn(projs_ns), source=0)
@@ -196,7 +198,7 @@ contains
                         max_dist            = maxval(dists_projs(:,ithr))
                         dists_projs(:,ithr) = 1. - (dists_projs(:,ithr) - min_dist) / (max_dist - min_dist)
                         dists_projs(:,ithr) = dists_projs(:,ithr) / sum(dists_projs(:,ithr))
-                        iproj               = multinomal(dists_projs(:,ithr))
+                        iproj               = angle_sampling(dists_projs(:,ithr), dists_sorted(:,ithr), proj_inds(:,ithr), projs_athres)
                         irot                = rots(iproj,ithr)
                     else
                         ! (1) identify shifts using the previously assigned best reference
