@@ -3118,7 +3118,7 @@ contains
         end do
         min_dist = minval(dists)
         max_dist = maxval(dists)
-        dists    = (dists - min_dist) / (max_dist - min_dist)
+        dists    = 1. - (dists - min_dist) / (max_dist - min_dist)
         dists    = dists / sum(dists)
         closest  = multinomal(dists)
     end function sample_proj
