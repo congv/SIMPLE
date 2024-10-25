@@ -157,11 +157,11 @@ contains
         integer,                 allocatable   :: locn(:)
         type(pftcc_shsrch_grad) :: grad_shsrch_obj(nthr_glob) !< origin shift search object, L-BFGS with gradient
         type(ori)               :: o_prev
-        integer :: i, j, iproj, iptcl, projs_ns, ithr, irot, inds_sorted(pftcc%nrots,nthr_glob), istate, iref_start
+        integer :: i, j, iproj, iptcl, projs_ns, ithr, irot, inds_sorted(pftcc%nrots,nthr_glob), istate, iref_start, rots(params_glob%nspace,nthr_glob)
         logical :: l_doshift
         real    :: dists_inpl(pftcc%nrots,nthr_glob), dists_inpl_sorted(pftcc%nrots,nthr_glob), rotmat(2,2)
         real    :: dists_projs(params_glob%nspace,nthr_glob), lims(2,2), lims_init(2,2), cxy(3), cxy_prob(3)
-        real    ::  rot_xy(2), inpl_athres
+        real    :: rot_xy(2), inpl_athres, min_dist, max_dist
         call seed_rnd
         if( params_glob%l_sh_first .and. params_glob%l_doshift )then
             ! make shift search objects
@@ -180,15 +180,30 @@ contains
                 call calc_num2sample(params_glob%nspace, 'dist', projs_ns, state=istate)
                 if( allocated(locn) ) deallocate(locn)
                 allocate(locn(projs_ns), source=0)
-                !$omp parallel do default(shared) private(i,j,iptcl,ithr,o_prev,iproj,irot,cxy,cxy_prob,rot_xy,rotmat,locn)&
+                !$omp parallel do default(shared) private(i,j,iptcl,ithr,o_prev,iproj,irot,cxy,cxy_prob,rot_xy,rotmat,locn,min_dist,max_dist)&
                 !$omp proc_bind(close) schedule(static)
                 do i = 1, self%nptcls
                     iptcl = self%pinds(i)
                     ithr  = omp_get_thread_num() + 1
-                    ! (1) identify shifts using the previously assigned best reference
-                    call build_glob%spproj_field%get_ori(iptcl, o_prev)   ! previous ori
-                    irot  = pftcc%get_roind(360.-o_prev%e3get())          ! in-plane angle index
-                    iproj = build_glob%eulspace%sample_proj(o_prev) ! previous projection direction
+                    if( params_glob%l_prob_sh )then
+                        do iproj = 1, params_glob%nspace
+                            call pftcc%gencorrs(iref_start + iproj, iptcl, dists_inpl(:,ithr))
+                            dists_inpl(:,ithr)      = eulprob_dist_switch(dists_inpl(:,ithr))
+                            rots(iproj,ithr)        = angle_sampling(dists_inpl(:,ithr), dists_inpl_sorted(:,ithr), inds_sorted(:,ithr), inpl_athres)
+                            dists_projs(iproj,ithr) = dists_inpl(rots(iproj,ithr),ithr)
+                        enddo
+                        min_dist            = minval(dists_projs(:,ithr))
+                        max_dist            = maxval(dists_projs(:,ithr))
+                        dists_projs(:,ithr) = 1. - (dists_projs(:,ithr) - min_dist) / (max_dist - min_dist)
+                        dists_projs(:,ithr) = dists_projs(:,ithr) / sum(dists_projs(:,ithr))
+                        iproj               = multinomal(dists_projs(:,ithr))
+                        irot                = rots(iproj,ithr)
+                    else
+                        ! (1) identify shifts using the previously assigned best reference
+                        call build_glob%spproj_field%get_ori(iptcl, o_prev)   ! previous ori
+                        irot  = pftcc%get_roind(360.-o_prev%e3get())          ! in-plane angle index
+                        iproj = build_glob%eulspace%sample_proj(o_prev) ! previous projection direction
+                    endif
                     ! BFGS over shifts
                     call grad_shsrch_obj(ithr)%set_indices(iref_start + iproj, iptcl)
                     cxy = grad_shsrch_obj(ithr)%minimize(irot=irot, sh_rot=.false.)
@@ -208,25 +223,6 @@ contains
                         self%loc_tab(iproj,i,istate)%y      = rot_xy(2)
                         self%loc_tab(iproj,i,istate)%has_sh = .true.
                     enddo
-                    ! (3) see if we can refine the shifts by re-searching them for individual references in the 
-                    !     identified probabilsitic neighborhood
-                    if( params_glob%l_prob_sh )then
-                        locn = minnloc(dists_projs(:,ithr), projs_ns)
-                        do j = 1,projs_ns
-                            iproj = locn(j)
-                            ! BFGS over shifts
-                            call grad_shsrch_obj(ithr)%set_indices(iref_start + iproj, iptcl)
-                            irot     = self%loc_tab(iproj,i,istate)%inpl
-                            cxy_prob = grad_shsrch_obj(ithr)%minimize(irot=irot, sh_rot=.true., xy_in=cxy(2:3))
-                            if( irot > 0 )then
-                                self%loc_tab(iproj,i,istate)%inpl   = irot
-                                self%loc_tab(iproj,i,istate)%dist   = eulprob_dist_switch(cxy_prob(1))
-                                self%loc_tab(iproj,i,istate)%x      = cxy_prob(2)
-                                self%loc_tab(iproj,i,istate)%y      = cxy_prob(3)
-                                self%loc_tab(iproj,i,istate)%has_sh = .true.
-                            endif
-                        end do
-                    endif
                 enddo
                 !$omp end parallel do
             enddo
