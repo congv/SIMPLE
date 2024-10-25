@@ -207,6 +207,7 @@ type :: oris
     procedure          :: find_best_classes
     procedure          :: class_robust_rejection
     procedure          :: find_closest_proj
+    procedure          :: sample_proj
     procedure          :: discretize
     procedure, private :: nearest_proj_neighbors_1
     procedure, private :: nearest_proj_neighbors_2
@@ -3105,6 +3106,22 @@ contains
         end do
         closest = minloc( dists, dim=1 )
     end function find_closest_proj
+
+    !! KEEP THIS ROUTINE SERIAL
+    function sample_proj( self, o_in ) result( closest )
+        class(oris), intent(in) :: self
+        class(ori),  intent(in) :: o_in
+        real    :: dists(self%n), min_dist, max_dist
+        integer :: closest, i
+        do i=1,self%n
+            dists(i)=self%o(i).euldist.o_in
+        end do
+        min_dist = minval(dists)
+        max_dist = maxval(dists)
+        dists    = (dists - min_dist) / (max_dist - min_dist)
+        dists    = dists / sum(dists)
+        closest  = multinomal(dists)
+    end function sample_proj
 
     !>  \brief  method for discretization of the projection directions
     subroutine discretize( self, n )
