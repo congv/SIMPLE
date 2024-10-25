@@ -202,7 +202,7 @@ contains
                         ! (1) identify shifts using the previously assigned best reference
                         call build_glob%spproj_field%get_ori(iptcl, o_prev)   ! previous ori
                         irot  = pftcc%get_roind(360.-o_prev%e3get())          ! in-plane angle index
-                        iproj = build_glob%eulspace%sample_proj(o_prev) ! previous projection direction
+                        iproj = build_glob%eulspace%find_closest_proj(o_prev) ! previous projection direction
                     endif
                     ! BFGS over shifts
                     call grad_shsrch_obj(ithr)%set_indices(iref_start + iproj, iptcl)

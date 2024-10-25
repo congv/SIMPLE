@@ -421,12 +421,14 @@ contains
 
     subroutine rnd_pftsz_k_mask( self )
         class(polarft_corrcalc), intent(inout) :: self
+        real, parameter :: K_THRES = 0.8, PFTSZ_THRES = 0.5
         integer :: i,k
         call seed_rnd
         self%pftsz_mask = .true.
         do k = self%kfromto(1), self%kfromto(2)
+            if( ran3() > K_THRES ) cycle
             do i = 1, self%pftsz
-                if( ran3() > 0.8 ) self%pftsz_mask(i,k) = .false.
+                if( ran3() > PFTSZ_THRES ) self%pftsz_mask(i,k) = .false.
             enddo
         enddo
     end subroutine rnd_pftsz_k_mask
