@@ -158,9 +158,9 @@ contains
         type(pftcc_shsrch_grad) :: grad_shsrch_obj(nthr_glob) !< origin shift search object, L-BFGS with gradient
         type(ori)               :: o_prev
         integer :: i, j, iproj, iptcl, projs_ns, ithr, irot, inds_sorted(pftcc%nrots,nthr_glob), istate, iref_start
-        integer :: proj_inds(params_glob%nspace,nthr_glob), rots(params_glob%nspace,nthr_glob)
+        integer :: proj_inds(params_glob%nspace,nthr_glob), rots(params_glob%nspace,nthr_glob), cnt
         logical :: l_doshift
-        real    :: dists_inpl(pftcc%nrots,nthr_glob), dists_inpl_sorted(pftcc%nrots,nthr_glob), rotmat(2,2)
+        real    :: dists_inpl(pftcc%nrots,nthr_glob), dists_inpl_sorted(pftcc%nrots,nthr_glob), rotmat(2,2), avg_sh(2)
         real    :: dists_projs(params_glob%nspace,nthr_glob), lims(2,2), lims_init(2,2), cxy(3), cxy_prob(3)
         real    :: rot_xy(2), inpl_athres, min_dist, max_dist, dists_sorted(params_glob%nspace,nthr_glob), projs_athres
         call seed_rnd
@@ -188,10 +188,18 @@ contains
                     iptcl = self%pinds(i)
                     ithr  = omp_get_thread_num() + 1
                     if( params_glob%l_prob_sh )then
-                        ! (1) identify shifts using the previously assigned best reference
-                        call build_glob%spproj_field%get_ori(iptcl, o_prev)   ! previous ori
-                        irot  = pftcc%get_roind(360.-o_prev%e3get())          ! in-plane angle index
-                        iproj = build_glob%eulspace%sample_proj(o_prev, int(real(params_glob%nspace) / 90.)) ! previous projection direction
+                        do iproj = 1, params_glob%nspace
+                            call pftcc%gencorrs(iref_start + iproj, iptcl, dists_inpl(:,ithr))
+                            dists_inpl(:,ithr)      = eulprob_dist_switch(dists_inpl(:,ithr))
+                            rots(iproj,ithr)        = angle_sampling(dists_inpl(:,ithr), dists_inpl_sorted(:,ithr), inds_sorted(:,ithr), inpl_athres)
+                            dists_projs(iproj,ithr) = dists_inpl(rots(iproj,ithr),ithr)
+                        enddo
+                        min_dist            = minval(dists_projs(:,ithr))
+                        max_dist            = maxval(dists_projs(:,ithr))
+                        dists_projs(:,ithr) = 1. - (dists_projs(:,ithr) - min_dist) / (max_dist - min_dist)
+                        dists_projs(:,ithr) = dists_projs(:,ithr) / sum(dists_projs(:,ithr))
+                        iproj               = multinomal(dists_projs(:,ithr), int(projs_athres * real(params_glob%nspace) / 200. ))
+                        irot                = rots(iproj,ithr)
                     else
                         ! (1) identify shifts using the previously assigned best reference
                         call build_glob%spproj_field%get_ori(iptcl, o_prev)   ! previous ori
@@ -249,23 +257,41 @@ contains
                             irot = angle_sampling(dists_inpl(:,ithr), dists_inpl_sorted(:,ithr), inds_sorted(:,ithr), inpl_athres)
                             self%loc_tab(iproj,i,istate)%dist = dists_inpl(irot,ithr)
                             self%loc_tab(iproj,i,istate)%inpl = irot
-                            dists_projs(iproj,ithr) = dists_inpl(irot,ithr)
+                            dists_projs(iproj,ithr)           = dists_inpl(irot,ithr)
                         enddo
-                        locn = minnloc(dists_projs(:,ithr), projs_ns)
+                        locn   = minnloc(dists_projs(:,ithr), projs_ns)
+                        avg_sh = 0.
+                        cnt    = 0
+                        self%loc_tab(:,i,istate)%has_sh = .true.
+                        self%loc_tab(:,i,istate)%x      = 0.
+                        self%loc_tab(:,i,istate)%y      = 0.
                         do j = 1,projs_ns
                             iproj = locn(j)
                             ! BFGS over shifts
                             call grad_shsrch_obj(ithr)%set_indices(iref_start + iproj, iptcl)
                             irot = self%loc_tab(iproj,i,istate)%inpl
-                            cxy  = grad_shsrch_obj(ithr)%minimize(irot=irot)
+                            cxy  = grad_shsrch_obj(ithr)%minimize(irot=irot, sh_rot=.false.)
                             if( irot > 0 )then
-                                self%loc_tab(iproj,i,istate)%inpl = irot
-                                self%loc_tab(iproj,i,istate)%dist = eulprob_dist_switch(cxy(1))
-                                self%loc_tab(iproj,i,istate)%x    = cxy(2)
-                                self%loc_tab(iproj,i,istate)%y    = cxy(3)
+                                avg_sh = avg_sh + cxy(2:3)
+                                cnt    = cnt + 1
                             endif
-                            self%loc_tab(iproj,i,istate)%has_sh = .true.
                         end do
+                        avg_sh = avg_sh / real(cnt)
+                        ! (2) search projection directions using those shifts for all references
+                        do iproj = 1, params_glob%nspace
+                            call pftcc%gencorrs(iref_start + iproj, iptcl, avg_sh, dists_inpl(:,ithr))
+                            dists_inpl(:,ithr) = eulprob_dist_switch(dists_inpl(:,ithr))
+                            irot = angle_sampling(dists_inpl(:,ithr), dists_inpl_sorted(:,ithr), inds_sorted(:,ithr), inpl_athres)
+                            ! rotate the shift vector to the frame of reference
+                            call rotmat2d(pftcc%get_rot(irot), rotmat)
+                            rot_xy = matmul(avg_sh, rotmat)
+                            self%loc_tab(iproj,i,istate)%dist   = dists_inpl(irot,ithr)
+                            dists_projs(iproj,ithr)             = dists_inpl(irot,ithr)
+                            self%loc_tab(iproj,i,istate)%inpl   = irot
+                            self%loc_tab(iproj,i,istate)%x      = rot_xy(1)
+                            self%loc_tab(iproj,i,istate)%y      = rot_xy(2)
+                            self%loc_tab(iproj,i,istate)%has_sh = .true.
+                        enddo
                     enddo
                     !$omp end parallel do
                 enddo

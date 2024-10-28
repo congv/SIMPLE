@@ -24,7 +24,7 @@ do i=1,10
 end do
 pvec = cnts
 
-do i=1,10
+do i=1,7
     print *, 'which = ', i, '; prob = ', pvec(i)
 enddo
 
