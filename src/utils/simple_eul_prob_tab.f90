@@ -198,7 +198,7 @@ contains
                         max_dist            = maxval(dists_projs(:,ithr))
                         dists_projs(:,ithr) = 1. - (dists_projs(:,ithr) - min_dist) / (max_dist - min_dist)
                         dists_projs(:,ithr) = dists_projs(:,ithr) / sum(dists_projs(:,ithr))
-                        iproj               = angle_sampling(dists_projs(:,ithr), dists_sorted(:,ithr), proj_inds(:,ithr), projs_athres)
+                        iproj               = multinomal(dists_projs(:,ithr), int(projs_athres * real(params_glob%nspace) / 90. ))
                         irot                = rots(iproj,ithr)
                     else
                         ! (1) identify shifts using the previously assigned best reference

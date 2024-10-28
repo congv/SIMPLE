@@ -33,6 +33,11 @@ interface greedy_sampling
     module procedure greedy_sampling_2
 end interface
 
+interface multinomal
+    module procedure multinomal_1
+    module procedure multinomal_2
+end interface
+
 contains
 
     !>  \brief  random seed
@@ -130,7 +135,7 @@ contains
 
     !>  \brief  generates a multinomal 1-of-K random number according to the
     !!          distribution in pvec
-    function multinomal( pvec ) result( which )
+    function multinomal_1( pvec ) result( which )
         use simple_math, only: hpsort
         real,     intent(in) :: pvec(:) !< probabilities
         real,    allocatable :: pvec_sorted(:)
@@ -148,7 +153,28 @@ contains
         enddo
         which = inds(max(which,1))
         deallocate(pvec_sorted,inds)
-    end function multinomal
+    end function multinomal_1
+
+    function multinomal_2( pvec, n_ub ) result( which )
+        use simple_math, only: hpsort
+        real,     intent(in) :: pvec(:) !< probabilities
+        integer,  intent(in) :: n_ub
+        real,    allocatable :: pvec_sorted(:)
+        integer, allocatable :: inds(:)
+        integer :: i, n, which
+        real    :: rnd, bound
+        n = size(pvec)
+        allocate(pvec_sorted(n), source=pvec)
+        inds = (/(i,i=1,n)/)
+        call hpsort(pvec_sorted, inds)
+        pvec_sorted(n-n_ub:n) = pvec_sorted(n-n_ub:n) / sum(pvec_sorted(n-n_ub:n))
+        rnd = ran3()
+        do which=n,n-n_ub,-1
+            bound = sum(pvec_sorted(which:n))
+            if( rnd <= bound )exit
+        enddo
+        deallocate(pvec_sorted,inds)
+    end function multinomal_2
 
     ! using the multinomal sampling idea to be more greedy towards the best probabilistic candidates
     function greedy_sampling_1( pvec, nsmpl_ub, nsmpl_lb ) result( which )

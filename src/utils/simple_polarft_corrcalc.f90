@@ -421,7 +421,7 @@ contains
 
     subroutine rnd_pftsz_k_mask( self )
         class(polarft_corrcalc), intent(inout) :: self
-        real, parameter :: K_THRES = 0.8, PFTSZ_THRES = 0.5
+        real, parameter :: K_THRES = 1., PFTSZ_THRES = 0.8
         integer :: i,k
         call seed_rnd
         self%pftsz_mask = .true.
