@@ -176,6 +176,7 @@ contains
             bound = sum(pvec_sorted(which:n))
             if( rnd <= bound )exit
         enddo
+        which = inds(max(which,1))
         deallocate(pvec_sorted,inds)
     end function multinomal_2
 

@@ -7,7 +7,7 @@ pvec(7) = 10.
 pvec(6) = 20.
 pvec(5) = 30.
 pvec(4) = 100.
-pvec(3) = 80.
+pvec(3) = 50.
 pvec(2) = 20.
 pvec(1) = 10.
 
@@ -18,12 +18,14 @@ print *, pvec
 ! sample the distribution and calculate frequencies
 call seed_rnd
 cnts = 0.
-do i=1,10000
-    which = multinomal( pvec )
+do i=1,10
+    which = multinomal( pvec, 5 )
     cnts(which) = cnts(which) + 1.0
 end do
-pvec = cnts / sum(cnts)
+pvec = cnts
 
-print *, pvec
+do i=1,10
+    print *, 'which = ', i, '; prob = ', pvec(i)
+enddo
 
 end program simple_test_multinomal
