@@ -162,11 +162,14 @@ contains
         real,    allocatable :: pvec_sorted(:)
         integer, allocatable :: inds(:)
         integer :: i, n, which
-        real    :: rnd, bound
+        real    :: rnd, bound, min_val, max_val
         n = size(pvec)
         allocate(pvec_sorted(n), source=pvec)
         inds = (/(i,i=1,n)/)
         call hpsort(pvec_sorted, inds)
+        min_val               = minval(pvec_sorted(n-n_ub:n))
+        max_val               = maxval(pvec_sorted(n-n_ub:n))
+        pvec_sorted(n-n_ub:n) = (pvec_sorted(n-n_ub:n) - min_val) / (max_val - min_val)
         pvec_sorted(n-n_ub:n) = pvec_sorted(n-n_ub:n) / sum(pvec_sorted(n-n_ub:n))
         rnd = ran3()
         do which=n,n-n_ub,-1
