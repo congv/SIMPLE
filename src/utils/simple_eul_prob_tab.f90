@@ -188,18 +188,10 @@ contains
                     iptcl = self%pinds(i)
                     ithr  = omp_get_thread_num() + 1
                     if( params_glob%l_prob_sh )then
-                        do iproj = 1, params_glob%nspace
-                            call pftcc%gencorrs(iref_start + iproj, iptcl, dists_inpl(:,ithr))
-                            dists_inpl(:,ithr)      = eulprob_dist_switch(dists_inpl(:,ithr))
-                            rots(iproj,ithr)        = angle_sampling(dists_inpl(:,ithr), dists_inpl_sorted(:,ithr), inds_sorted(:,ithr), inpl_athres)
-                            dists_projs(iproj,ithr) = dists_inpl(rots(iproj,ithr),ithr)
-                        enddo
-                        min_dist            = minval(dists_projs(:,ithr))
-                        max_dist            = maxval(dists_projs(:,ithr))
-                        dists_projs(:,ithr) = 1. - (dists_projs(:,ithr) - min_dist) / (max_dist - min_dist)
-                        dists_projs(:,ithr) = dists_projs(:,ithr) / sum(dists_projs(:,ithr))
-                        iproj               = multinomal(dists_projs(:,ithr), int(projs_athres * real(params_glob%nspace) / 90. ))
-                        irot                = rots(iproj,ithr)
+                        ! (1) identify shifts using the previously assigned best reference
+                        call build_glob%spproj_field%get_ori(iptcl, o_prev)   ! previous ori
+                        irot  = pftcc%get_roind(360.-o_prev%e3get())          ! in-plane angle index
+                        iproj = build_glob%eulspace%sample_proj(o_prev, int(real(params_glob%nspace) / 90.)) ! previous projection direction
                     else
                         ! (1) identify shifts using the previously assigned best reference
                         call build_glob%spproj_field%get_ori(iptcl, o_prev)   ! previous ori

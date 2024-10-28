@@ -3108,9 +3108,10 @@ contains
     end function find_closest_proj
 
     !! KEEP THIS ROUTINE SERIAL
-    function sample_proj( self, o_in ) result( closest )
-        class(oris), intent(in) :: self
-        class(ori),  intent(in) :: o_in
+    function sample_proj( self, o_in, n_ub ) result( closest )
+        class(oris),       intent(in) :: self
+        class(ori),        intent(in) :: o_in
+        integer, optional, intent(in) :: n_ub
         real    :: dists(self%n), min_dist, max_dist
         integer :: closest, i
         do i=1,self%n
@@ -3120,7 +3121,11 @@ contains
         max_dist = maxval(dists)
         dists    = 1. - (dists - min_dist) / (max_dist - min_dist)
         dists    = dists / sum(dists)
-        closest  = multinomal(dists)
+        if( present(n_ub) )then
+            closest  = multinomal(dists, n_ub)
+        else
+            closest  = multinomal(dists)
+        endif
     end function sample_proj
 
     !>  \brief  method for discretization of the projection directions
