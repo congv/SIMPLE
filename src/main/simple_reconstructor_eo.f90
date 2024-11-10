@@ -59,6 +59,7 @@ type :: reconstructor_eo
     ! INTERPOLATION
     procedure          :: grid_plane
     procedure          :: compress_exp
+    procedure          :: div_jacobian
     procedure          :: expand_exp
     procedure          :: sum_eos    !< for merging even and odd into sum
     procedure          :: sum_reduce !< for summing eo_recs obtained by parallel exec
@@ -462,6 +463,12 @@ contains
         call self%even%compress_exp
         call self%odd%compress_exp
     end subroutine compress_exp
+
+    subroutine div_jacobian( self )
+        class(reconstructor_eo), intent(inout) :: self
+        call self%even%div_jacobian
+        call self%odd%div_jacobian
+    end subroutine div_jacobian
 
     !>  \brief expand e/o
     subroutine expand_exp( self )

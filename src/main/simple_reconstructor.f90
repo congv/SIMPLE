@@ -17,6 +17,7 @@ type, extends(image) :: reconstructor
     real(kind=c_float), pointer :: rho(:,:,:)=>null()           !< sampling+CTF**2 density
     complex, allocatable        :: cmat_exp(:,:,:)              !< Fourier components of expanded reconstructor
     real,    allocatable        :: rho_exp(:,:,:)               !< sampling+CTF**2 density of expanded reconstructor
+    integer, allocatable        :: jacobian(:,:,:)
     real                        :: winsz          = RECWINSZ    !< window half-width
     real                        :: alpha          = KBALPHA     !< oversampling ratio
     real                        :: shconst_rec(3) = 0.          !< memoized constants for origin shifting
@@ -54,6 +55,7 @@ type, extends(image) :: reconstructor
     ! SUMMATION
     procedure          :: sum_reduce
     procedure          :: add_invtausq2rho
+    procedure          :: div_jacobian
     ! DESTRUCTORS
     procedure          :: dealloc_exp
     procedure          :: dealloc_rho
@@ -108,6 +110,8 @@ contains
                 &self%ldim_exp(3,1):self%ldim_exp(3,2)), source=cmplx(0.,0.))
             allocate(self%rho_exp( self%ldim_exp(1,1):self%ldim_exp(1,2),self%ldim_exp(2,1):self%ldim_exp(2,2),&
                 &self%ldim_exp(3,1):self%ldim_exp(3,2)), source=0.)
+            allocate(self%jacobian( self%ldim_exp(1,1):self%ldim_exp(1,2),self%ldim_exp(2,1):self%ldim_exp(2,2),&
+                &self%ldim_exp(3,1):self%ldim_exp(3,2)), source=0)
         end if
         call self%reset
     end subroutine alloc_rho
@@ -316,6 +320,8 @@ contains
                         self%rho_exp(cloc(1), floc(2), cloc(3))  = self%rho_exp(cloc(1), floc(2), cloc(3))  + w101 * ctfval
                         self%rho_exp(cloc(1), cloc(2), floc(3))  = self%rho_exp(cloc(1), cloc(2), floc(3))  + w110 * ctfval
                         self%rho_exp(cloc(1), cloc(2), cloc(3))  = self%rho_exp(cloc(1), cloc(2), cloc(3))  + w111 * ctfval
+                        ! jacobian
+                        self%jacobian(cloc(1), cloc(2), cloc(3)) = self%jacobian(cloc(1), cloc(2), cloc(3)) + 1
                     end do
                 end do
                 !$omp end do
@@ -354,8 +360,11 @@ contains
                         ! expanded matrices update
                         self%cmat_exp(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) =&
                             &self%cmat_exp(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) + comp*w
-                        self%rho_exp(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) =&
-                            &self%rho_exp(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) + ctfval*w
+                        self%rho_exp(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3))  =&
+                            &self%rho_exp(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3))  + ctfval*w
+                        ! jacobian
+                        self%jacobian(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) =&
+                            &self%jacobian(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) + 1
                     end do
                 end do
                 !$omp end do
@@ -706,6 +715,12 @@ contains
         !$omp end parallel do
     end subroutine add_invtausq2rho
 
+    subroutine div_jacobian( self )
+        class(reconstructor), intent(inout) :: self !< this instance
+        self%cmat_exp = self%cmat_exp / real(self%jacobian)
+        self%rho_exp  = self%rho_exp  / real(self%jacobian)
+    end subroutine div_jacobian
+
     ! DESTRUCTORS
 
     !>  \brief  is the expanded destructor
@@ -713,6 +728,7 @@ contains
         class(reconstructor), intent(inout) :: self !< this instance
         if( allocated(self%rho_exp)  ) deallocate(self%rho_exp)
         if( allocated(self%cmat_exp) ) deallocate(self%cmat_exp)
+        if( allocated(self%jacobian) ) deallocate(self%jacobian)
     end subroutine dealloc_exp
 
     !>  \brief  is a destructor

@@ -968,6 +968,7 @@ contains
                 build_glob%fsc(s,:) = 0.
                 cycle
             endif
+            call build_glob%eorecvols(s)%div_jacobian
             call build_glob%eorecvols(s)%compress_exp
             if( params_glob%l_distr_exec )then
                 call build_glob%eorecvols(s)%write_eos(VOL_FBODY//int2str_pad(s,2)//'_part'//&
