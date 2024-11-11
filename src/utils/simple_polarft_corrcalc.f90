@@ -61,6 +61,8 @@ type :: polarft_corrcalc
     real(sp),            allocatable :: polar(:,:)                  !< table of polar coordinates (in Cartesian coordinates)
     real(sp),            allocatable :: ctfmats(:,:,:)              !< expand set of CTF matrices (for efficient parallel exec)
     real(dp),            allocatable :: argtransf_shellone(:)       !< one dimensional argument transfer constants (shell k=1) for shifting the references
+    real(dp),            allocatable :: cavgs_num(:,:,:)            !< -"-, reference reg terms
+    real(dp),            allocatable :: cavgs_dem(:,:,:)            !< -"-
     complex(sp),         allocatable :: pfts_refs_even(:,:,:)       !< 3D complex matrix of polar reference sections (nrefs,pftsz,nk), even
     complex(sp),         allocatable :: pfts_refs_odd(:,:,:)        !< -"-, odd
     complex(sp),         allocatable :: norm_refs_even(:,:,:)       !< -"-, normalized even
@@ -167,7 +169,11 @@ type :: polarft_corrcalc
     procedure          :: gencorr_euclid_grad_for_rot_8
     procedure          :: gencorr_sigma_contrib
     procedure, private :: calc_frc
-    procedure          :: rotate_ref, rotate_ptcl, rotate_ctf
+    procedure          :: rotate_ref, rotate_ctf
+    procedure, private :: rotate_ptcl_cmplx, rotate_ptcl_real
+    generic            :: rotate_ptcl => rotate_ptcl_cmplx, rotate_ptcl_real
+    procedure          :: accumulate_cavgs
+    procedure          :: regularize_refs
     ! DESTRUCTOR
     procedure          :: kill
 end type polarft_corrcalc
@@ -292,7 +298,8 @@ contains
                     &self%pfts_drefs_odd (self%pftsz,self%kfromto(1):self%kfromto(2),3,params_glob%nthr),&
                     &self%pfts_ptcls(self%pftsz,self%kfromto(1):self%kfromto(2),1:self%nptcls),&
                     &self%sqsums_ptcls(1:self%nptcls),self%ksqsums_ptcls(1:self%nptcls),self%wsqsums_ptcls(1:self%nptcls),&
-                    &self%heap_vars(params_glob%nthr))
+                    &self%heap_vars(params_glob%nthr),self%cavgs_dem(self%pftsz,self%kfromto(1):self%kfromto(2),self%nrefs),&
+                    &self%cavgs_num(self%pftsz,self%kfromto(1):self%kfromto(2),self%nrefs))
         do ithr=1,params_glob%nthr
             allocate(self%heap_vars(ithr)%pft_ref(self%pftsz,self%kfromto(1):self%kfromto(2)),&
                 &self%heap_vars(ithr)%pft_ref_tmp(self%pftsz,self%kfromto(1):self%kfromto(2)),&
@@ -315,6 +322,8 @@ contains
         self%sqsums_ptcls    = 0.d0
         self%ksqsums_ptcls   = 0.d0
         self%wsqsums_ptcls   = 0.d0
+        self%cavgs_num       = 0.d0
+        self%cavgs_dem       = 0.d0
         ! set CTF flag
         self%with_ctf = .false.
         if( params_glob%ctf .ne. 'no' ) self%with_ctf = .true.
@@ -785,7 +794,7 @@ contains
     end subroutine rotate_ref
 
     ! Particle rotation
-    subroutine rotate_ptcl( self, ptcl, irot, ptcl_rot)
+    subroutine rotate_ptcl_cmplx( self, ptcl, irot, ptcl_rot)
         class(polarft_corrcalc), intent(inout) :: self
         complex(sp),             intent(in)    :: ptcl(1:self%pftsz,self%kfromto(1):self%kfromto(2))
         integer,                 intent(in)    :: irot
@@ -804,7 +813,28 @@ contains
             ptcl_rot(irot-self%pftsz:self%pftsz,       :) = conjg(ptcl(    1:mid,       :))
             ptcl_rot(              1:irot-self%pftsz-1,:) =       ptcl(mid+1:self%pftsz,:)
         endif
-    end subroutine rotate_ptcl
+    end subroutine rotate_ptcl_cmplx
+
+    subroutine rotate_ptcl_real( self, ptcl, irot, ptcl_rot)
+        class(polarft_corrcalc), intent(inout) :: self
+        real,                    intent(in)    :: ptcl(1:self%pftsz,self%kfromto(1):self%kfromto(2))
+        integer,                 intent(in)    :: irot
+        real(dp),                intent(out)   :: ptcl_rot(1:self%pftsz,self%kfromto(1):self%kfromto(2))
+        integer :: mid
+        if( irot == 1 )then
+            ptcl_rot = real(ptcl, dp)
+        elseif( irot >= 2 .and. irot <= self%pftsz )then
+            mid = self%pftsz - irot + 1
+            ptcl_rot(   1:irot-1,    :) = real(ptcl(mid+1:self%pftsz,:), dp)
+            ptcl_rot(irot:self%pftsz,:) = real(ptcl(    1:mid,       :), dp)
+        elseif( irot == self%pftsz + 1 )then
+            ptcl_rot = real(ptcl, dp)
+        else
+            mid = self%nrots - irot + 1
+            ptcl_rot(irot-self%pftsz:self%pftsz,       :) = real(ptcl(    1:mid,       :), dp)
+            ptcl_rot(              1:irot-self%pftsz-1,:) = real(ptcl(mid+1:self%pftsz,:), dp)
+        endif
+    end subroutine rotate_ptcl_real
 
     ! Particle rotation of the CTF or any real matrix
     subroutine rotate_ctf( self, iptcl, irot, ctf_rot)
@@ -1085,6 +1115,50 @@ contains
     end subroutine allocate_refs_memoization
 
     ! CALCULATORS
+
+    subroutine accumulate_cavgs( self, eulspace, ptcl_eulspace, glob_pinds )
+        use simple_oris
+        class(polarft_corrcalc), intent(inout) :: self
+        type(oris),              intent(in)    :: eulspace
+        type(oris),              intent(in)    :: ptcl_eulspace
+        integer,                 intent(in)    :: glob_pinds(self%nptcls)
+        type(ori) :: o_prev
+        integer   :: i, iref, iptcl, loc
+        real      :: inpl_corrs(self%nrots), ptcl_ctf(self%pftsz,self%kfromto(1):self%kfromto(2),self%nptcls)
+        real(dp)  :: ctf_rot(self%pftsz,self%kfromto(1):self%kfromto(2)), ptcl_ctf_rot(self%pftsz,self%kfromto(1):self%kfromto(2))
+        ptcl_ctf = real(self%pfts_ptcls * self%ctfmats)
+        !$omp parallel do default(shared) private(i,iptcl,o_prev,loc,iref) proc_bind(close) schedule(static)
+        do i = 1, self%nptcls
+            iptcl = glob_pinds(i)
+            ! previous parameters
+            call ptcl_eulspace%get_ori(iptcl, o_prev)  ! previous ori
+            loc  = self%get_roind(360.-o_prev%e3get()) ! in-plane angle index
+            iref = (o_prev%get_state()-1)*self%nrefs + eulspace%find_closest_proj(o_prev)
+            call self%rotate_ptcl(    ptcl_ctf(:,:,i), loc, ptcl_ctf_rot)
+            call self%rotate_ptcl(self%ctfmats(:,:,i), loc,      ctf_rot)
+            self%cavgs_num(:,:,iref) = self%cavgs_num(:,:,iref) + ptcl_ctf_rot
+            self%cavgs_dem(:,:,iref) = self%cavgs_dem(:,:,iref) +      ctf_rot**2
+        enddo
+        !$omp end parallel do
+    end subroutine accumulate_cavgs
+
+    subroutine regularize_refs( self )
+        class(polarft_corrcalc), intent(inout) :: self
+        integer  :: iref, k
+        !$omp parallel do default(shared) private(k) proc_bind(close) schedule(static)
+        do k = self%kfromto(1),self%kfromto(2)
+            where( abs(self%cavgs_dem(:,k,:)) > TINY )
+                self%cavgs_num(:,k,:) = self%cavgs_num(:,k,:) / self%cavgs_dem(:,k,:)
+            endwhere
+        enddo
+        !$omp end parallel do
+        !$omp parallel do default(shared) private(iref) proc_bind(close) schedule(static)
+        do iref = 1, self%nrefs
+            self%pfts_refs_even(:,:,iref) = self%pfts_refs_even(:,:,iref) - real(self%cavgs_num(:,:,iref))
+            self%pfts_refs_odd( :,:,iref) = self%pfts_refs_odd( :,:,iref) - real(self%cavgs_num(:,:,iref))
+        enddo
+        !$omp end parallel do
+    end subroutine regularize_refs
 
     subroutine create_polar_absctfmats( self, spproj, oritype, pfromto )
         use simple_ctf,        only: ctf
