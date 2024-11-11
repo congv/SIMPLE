@@ -364,7 +364,7 @@ contains
                             &self%rho_exp(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3))  + ctfval*w
                         ! jacobian
                         self%jacobian(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) =&
-                            &self%jacobian(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) + 1
+                            &self%jacobian(win(1,1):win(2,1), win(1,2):win(2,2), win(1,3):win(2,3)) + w
                     end do
                 end do
                 !$omp end do
