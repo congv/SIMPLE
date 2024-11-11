@@ -1127,7 +1127,7 @@ contains
         real      :: inpl_corrs(self%nrots), ptcl_ctf(self%pftsz,self%kfromto(1):self%kfromto(2),self%nptcls)
         real(dp)  :: ctf_rot(self%pftsz,self%kfromto(1):self%kfromto(2)), ptcl_ctf_rot(self%pftsz,self%kfromto(1):self%kfromto(2))
         ptcl_ctf = real(self%pfts_ptcls * self%ctfmats)
-        !$omp parallel do default(shared) private(i,iptcl,o_prev,loc,iref) proc_bind(close) schedule(static)
+        !$omp parallel do default(shared) private(i,iptcl,o_prev,loc,iref,ptcl_ctf_rot,ctf_rot) proc_bind(close) schedule(static)
         do i = 1, self%nptcls
             iptcl = glob_pinds(i)
             ! previous parameters
