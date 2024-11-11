@@ -1123,19 +1123,21 @@ contains
         type(oris),              intent(in)    :: ptcl_eulspace
         integer,                 intent(in)    :: glob_pinds(self%nptcls)
         type(ori) :: o_prev
-        integer   :: i, iref, iptcl, loc
-        real      :: inpl_corrs(self%nrots), ptcl_ctf(self%pftsz,self%kfromto(1):self%kfromto(2),self%nptcls)
+        integer   :: i, iref, iptcl, loc, ithr
         real(dp)  :: ctf_rot(self%pftsz,self%kfromto(1):self%kfromto(2)), ptcl_ctf_rot(self%pftsz,self%kfromto(1):self%kfromto(2))
-        ptcl_ctf = real(self%pfts_ptcls * self%ctfmats)
-        !$omp parallel do default(shared) private(i,iptcl,o_prev,loc,iref,ptcl_ctf_rot,ctf_rot) proc_bind(close) schedule(static)
+        complex(sp), pointer :: shmat(:,:)
+        !$omp parallel do default(shared) private(i,iptcl,ithr,shmat,o_prev,loc,iref,ptcl_ctf_rot,ctf_rot) proc_bind(close) schedule(static)
         do i = 1, self%nptcls
             iptcl = glob_pinds(i)
+            ithr  = omp_get_thread_num() + 1
+            shmat => self%heap_vars(ithr)%shmat
             ! previous parameters
             call ptcl_eulspace%get_ori(iptcl, o_prev)  ! previous ori
             loc  = self%get_roind(360.-o_prev%e3get()) ! in-plane angle index
             iref = (o_prev%get_state()-1)*self%nrefs + eulspace%find_closest_proj(o_prev)
-            call self%rotate_ptcl(    ptcl_ctf(:,:,i), loc, ptcl_ctf_rot)
-            call self%rotate_ptcl(self%ctfmats(:,:,i), loc,      ctf_rot)
+            call self%gen_shmat(ithr, o_prev%get_2Dshift(), shmat)
+            call self%rotate_ptcl(real(shmat * self%pfts_ptcls(:,:,i) * self%ctfmats(:,:,i)), loc, ptcl_ctf_rot)
+            call self%rotate_ptcl(                                      self%ctfmats(:,:,i),  loc,      ctf_rot)
             self%cavgs_num(:,:,iref) = self%cavgs_num(:,:,iref) + ptcl_ctf_rot
             self%cavgs_dem(:,:,iref) = self%cavgs_dem(:,:,iref) +      ctf_rot**2
         enddo
