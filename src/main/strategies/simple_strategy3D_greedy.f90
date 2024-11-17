@@ -36,8 +36,9 @@ contains
     subroutine srch_greedy( self, ithr )
         class(strategy3D_greedy), intent(inout) :: self
         integer,                  intent(in)    :: ithr
-        integer   :: iref, isample, loc(1)
-        real      :: inpl_corrs(self%s%nrots)
+        integer, parameter :: N_SAMPLES = 10
+        integer   :: iref, isample, loc, refs_inpl(self%s%nrefs), locn(N_SAMPLES), inpl_ind
+        real      :: inpl_corrs(self%s%nrots), refs_corrs(self%s%nrefs), cxy(3)
         if( build_glob%spproj_field%get_state(self%s%iptcl) > 0 )then
             ! set thread index
             self%s%ithr = ithr
@@ -55,10 +56,24 @@ contains
                     else
                         call pftcc_glob%gencorrs(iref, self%s%iptcl, inpl_corrs)
                     endif
-                    loc = maxloc(inpl_corrs)
-                    call self%s%store_solution(iref, loc(1), inpl_corrs(loc(1)))
+                    loc = maxloc(inpl_corrs, dim=1)
+                    refs_corrs(iref) = inpl_corrs(loc)
+                    refs_inpl( iref) = loc
+                    call self%s%store_solution(iref, loc, inpl_corrs(loc))
                 endif
             end do
+            locn = maxnloc(refs_corrs, N_SAMPLES)
+            do isample = 1, N_SAMPLES
+                iref     = locn(isample)
+                inpl_ind = refs_inpl(iref)
+                call self%s%grad_shsrch_obj%set_indices(iref, self%s%iptcl)
+                cxy = self%s%grad_shsrch_obj%minimize(irot=inpl_ind)
+                if( inpl_ind == 0 )then
+                    inpl_ind = refs_inpl(iref)
+                    cxy      = [real(pftcc_glob%gencorr_for_rot_8(iref, self%s%iptcl, inpl_ind)), 0.,0.]
+                endif
+                call self%s%store_solution(iref, inpl_ind, cxy(1))
+            enddo
             ! in greedy mode, we evaluate all refs
             self%s%nrefs_eval = self%s%nrefs
             ! take care of the in-planes

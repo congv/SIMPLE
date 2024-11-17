@@ -24,9 +24,9 @@ type :: pftcc_shsrch_grad
     integer                   :: maxits       = 100     !< max # iterations
     logical                   :: shbarr       = .true.  !< shift barrier constraint or not
     integer                   :: cur_inpl_idx = 0       !< index of inplane angle for shift search
-    integer                   :: max_evals    = 5       !< max # inplrot/shsrch cycles
+    integer                   :: max_evals    = 1       !< max # inplrot/shsrch cycles
     real                      :: max_shift    = 0.      !< maximal shift
-    logical                   :: opt_angle    = .true.  !< optimise in-plane angle with callback flag
+    logical                   :: opt_angle    = .false. !< optimise in-plane angle with callback flag
     logical                   :: coarse_init  = .false. !< whether to perform an intial coarse search over the range
 contains
     procedure :: new         => grad_shsrch_new
@@ -215,11 +215,6 @@ contains
                 irot    =   lowest_rot                 ! in-plane index
                 cxy(1)  = - real(lowest_cost_overall)  ! correlation
                 cxy(2:) =   real(lowest_shift)         ! shift
-                if( l_sh_rot )then
-                    ! rotate the shift vector to the frame of reference
-                    call rotmat2d(pftcc_glob%get_rot(irot), rotmat)
-                    cxy(2:) = matmul(cxy(2:), rotmat)
-                endif
             else
                 irot = 0 ! to communicate that a better solution was not found
             endif
@@ -245,11 +240,6 @@ contains
             if( found_better )then
                 cxy(1)  = - real(lowest_cost_overall)  ! correlation
                 cxy(2:) =   lowest_shift               ! shift
-                if( l_sh_rot )then
-                    ! rotate the shift vector to the frame of reference
-                    call rotmat2d(pftcc_glob%get_rot(irot), rotmat)
-                    cxy(2:) = matmul(cxy(2:), rotmat)
-                endif
             else
                 irot = 0 ! to communicate that a better solution was not found
             endif
