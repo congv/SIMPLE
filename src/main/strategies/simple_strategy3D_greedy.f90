@@ -37,8 +37,8 @@ contains
         class(strategy3D_greedy), intent(inout) :: self
         integer,                  intent(in)    :: ithr
         integer, parameter :: N_SAMPLES = 10
-        integer   :: iref, isample, loc, refs_inpl(self%s%nrefs), locn(N_SAMPLES), inpl_ind
-        real      :: inpl_corrs(self%s%nrots), refs_corrs(self%s%nrefs), cxy(3)
+        integer   :: iref, isample, loc, refs_inpl(self%s%nrefs), inpl_ind
+        real      :: inpl_corrs(self%s%nrots), refs_corrs(self%s%nrefs), cxy(3), prob_shift
         if( build_glob%spproj_field%get_state(self%s%iptcl) > 0 )then
             ! set thread index
             self%s%ithr = ithr
@@ -62,24 +62,20 @@ contains
                     call self%s%store_solution(iref, loc, inpl_corrs(loc))
                 endif
             end do
-            locn = maxnloc(refs_corrs, N_SAMPLES)
-            do isample = 1, N_SAMPLES
-                iref     = locn(isample)
+            iref     = maxloc(refs_corrs, dim=1)
+            inpl_ind = refs_inpl(iref)
+            call self%s%grad_shsrch_obj%set_indices(iref, self%s%iptcl)
+            cxy = self%s%grad_shsrch_obj%minimize(irot=inpl_ind)
+            if( inpl_ind == 0 )then
                 inpl_ind = refs_inpl(iref)
-                call self%s%grad_shsrch_obj%set_indices(iref, self%s%iptcl)
-                cxy = self%s%grad_shsrch_obj%minimize(irot=inpl_ind)
-                if( inpl_ind == 0 )then
-                    inpl_ind = refs_inpl(iref)
-                    cxy      = [real(pftcc_glob%gencorr_for_rot_8(iref, self%s%iptcl, inpl_ind)), 0.,0.]
-                endif
-                call self%s%store_solution(iref, inpl_ind, cxy(1))
-            enddo
-            ! in greedy mode, we evaluate all refs
-            self%s%nrefs_eval = self%s%nrefs
-            ! take care of the in-planes
-            call self%s%inpl_srch
-            ! prepare orientation
-            call self%oris_assign
+                cxy      = [real(pftcc_glob%gencorr_for_rot_8(iref, self%s%iptcl, inpl_ind)), 0.,0.]
+            endif
+            prob_shift = refs_corrs(iref) / (refs_corrs(iref) + cxy(1))
+            if( ran3() < prob_shift )then
+                call assign_ori(self%s, iref, inpl_ind, refs_corrs(iref), [0.,0.])
+            else
+                call assign_ori(self%s, iref, inpl_ind, cxy(1), cxy(2:3))
+            endif
         else
             call build_glob%spproj_field%reject(self%s%iptcl)
         endif
