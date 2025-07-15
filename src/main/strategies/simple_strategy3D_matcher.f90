@@ -234,7 +234,7 @@ contains
                 ! calculate sigma2 for ML-based refinement
                 if ( params_glob%l_needs_sigma ) then
                     call build_glob%spproj_field%get_ori(iptcl, orientation)
-                    call orientation%set_shift(incr_shifts(:,iptcl_batch))
+                    call orientation%set_shift(build_glob%spproj_field%get_2Dshift(iptcl))
                     call eucl_sigma%calc_sigma2(pftcc, iptcl, orientation, 'proj')
                 end if
             enddo ! Particles loop

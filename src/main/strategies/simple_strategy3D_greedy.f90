@@ -34,7 +34,7 @@ contains
     subroutine srch_greedy( self, ithr )
         class(strategy3D_greedy), intent(inout) :: self
         integer,                  intent(in)    :: ithr
-        integer   :: iref, isample, loc(1)
+        integer   :: iref, isample, loc
         real      :: inpl_corrs(self%s%nrots)
         if( build_glob%spproj_field%get_state(self%s%iptcl) > 0 )then
             ! set thread index
@@ -54,14 +54,18 @@ contains
                     else
                         call pftcc_glob%gencorrs(iref, self%s%iptcl, inpl_corrs)
                     endif
-                    loc = maxloc(inpl_corrs)
-                    call self%s%store_solution(iref, loc(1), inpl_corrs(loc(1)))
+                    loc = maxloc(inpl_corrs, dim=1)
+                    if( params_glob%l_sh_first )then
+                        call self%s%store_solution(iref, loc, inpl_corrs(loc), sh=self%s%xy_first)
+                    else
+                        call self%s%store_solution(iref, loc, inpl_corrs(loc))
+                    endif
                 endif
             end do
             ! in greedy mode, we evaluate all refs
             self%s%nrefs_eval = self%s%nrefs
             ! take care of the in-planes
-            call self%s%inpl_srch
+            if( .not. params_glob%l_sh_first ) call self%s%inpl_srch
             ! prepare orientation
             call self%oris_assign
         else
