@@ -227,14 +227,14 @@ contains
                     call strategy3Dsrch(iptcl_batch)%ptr%new(strategy3Dspecs(iptcl_batch))
                     call strategy3Dsrch(iptcl_batch)%ptr%srch(ithr)
                     ! keep track of incremental shift
-                    incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl) - strategy3Dsrch(iptcl_batch)%ptr%s%prev_shvec
+                    incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl)
                     ! cleanup
                     call strategy3Dsrch(iptcl_batch)%ptr%kill
                 endif
                 ! calculate sigma2 for ML-based refinement
                 if ( params_glob%l_needs_sigma ) then
                     call build_glob%spproj_field%get_ori(iptcl, orientation)
-                    call orientation%set_shift(build_glob%spproj_field%get_2Dshift(iptcl))
+                    call orientation%set_shift(incr_shifts(:,iptcl_batch))
                     call eucl_sigma%calc_sigma2(pftcc, iptcl, orientation, 'proj')
                 end if
             enddo ! Particles loop
