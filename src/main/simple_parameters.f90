@@ -53,6 +53,7 @@ type :: parameters
     character(len=3)          :: fillin='no'          !< fillin particle sampling
     character(len=3)          :: ft2img='no'          !< convert Fourier transform to real image of power(yes|no){no}
     character(len=3)          :: frc_weight='no'      !< considering particle numbers of classes in computing frc (yes|no){no}
+    character(len=3)          :: frcref='no'          !< Whether to apply a FRC filter to the 3D polar reference(yes|no){no}
     character(len=3)          :: gauref='no'          !< Whether to apply a gaussian filter to the polar reference(yes|no){no}
     character(len=3)          :: guinier='no'         !< calculate Guinier plot(yes|no){no}
     character(len=3)          :: graphene_filt='no'   !< filter out graphene bands in correlation search
@@ -68,6 +69,7 @@ type :: parameters
     character(len=3)          :: json='no'            !< Print in json format (mainly for nice)
     character(len=3)          :: keepvol='no'         !< dev flag for preserving iterative volumes in refine3d
     character(len=3)          :: lam_anneal='no'      !< anneal lambda parameter
+    character(len=3)          :: linethres='no'       !< whether to consider angular threshold in common lines (yes|no){no}
     character(len=3)          :: linstates='no'       !< linearizing states in alignment (yes|no){no}
     character(len=3)          :: loc_sdev='no'        !< Whether to calculate local standard deviations(yes|no){no}
     character(len=3)          :: lp_auto='no'         !< automatically estimate lp(yes|no){no}
@@ -98,9 +100,6 @@ type :: parameters
     character(len=3)          :: pick_roi='no'
     character(len=3)          :: platonic='yes'       !< platonic symmetry or not(yes|no){yes}
     character(len=3)          :: polar='no'           !< To use polar FT representation(yes|no){no}
-    character(len=3)          :: polar_prep='no'      !< ptcl polarization is done once with ctf phase-flipping, without norm/mask(yes|no){no}
-    character(len=3)          :: polar_msk='no'       !< polar ptcl mask (yes|no){no}
-    character(len=3)          :: polar_stoch='no'     !< stochastic ptcl sampling when ref_type=clin (yes|no){no}
     character(len=3)          :: pre_norm='no'        !< pre-normalize images for PCA analysis
     character(len=3)          :: print_corrs='no'     !< exporting corrs during the refinement(yes|no){no}
     character(len=3)          :: proj_is_class='no'   !< intepret projection directions as classes
@@ -650,6 +649,7 @@ contains
         call check_carg('flipgain',       self%flipgain)
         call check_carg('ft2img',         self%ft2img)
         call check_carg('frc_weight',     self%frc_weight)
+        call check_carg('frcref',         self%frcref)
         call check_carg('gauref',         self%gauref)
         call check_carg('guinier',        self%guinier)
         call check_carg('graphene_filt',  self%graphene_filt)
@@ -670,6 +670,7 @@ contains
         call check_carg('kweight_chunk',  self%kweight_chunk)
         call check_carg('kweight_pool',   self%kweight_pool)
         call check_carg('lam_anneal',     self%lam_anneal)
+        call check_carg('linethres',      self%linethres)
         call check_carg('linstates',      self%linstates)
         call check_carg('linstates_mode', self%linstates_mode)
         call check_carg('loc_sdev',       self%loc_sdev)
@@ -719,9 +720,6 @@ contains
         call check_carg('picker',         self%picker)
         call check_carg('platonic',       self%platonic)
         call check_carg('polar',          self%polar)
-        call check_carg('polar_prep',     self%polar_prep)
-        call check_carg('polar_msk',      self%polar_msk)
-        call check_carg('polar_stoch',    self%polar_stoch)
         call check_carg('pre_norm',       self%pre_norm)
         call check_carg('prg',            self%prg)
         call check_carg('print_corrs',    self%print_corrs)
