@@ -261,7 +261,7 @@ type :: parameters
     character(len=STDLEN)     :: real_filter=''
     character(len=STDLEN)     :: refine='shc'         !< refinement mode(snhc|shc|neigh|shc_neigh){shc}
     character(len=STDLEN)     :: refine_type='3D'     !< refinement mode(3D|2D|hybrid){3D}
-    character(len=STDLEN)     :: ref_type='cavg'      !< polar reference type(cavg|clin|cavg_clin){cavg}
+    character(len=STDLEN)     :: ref_type='cavg'      !< polar reference type(cavg|clin|vol){cavg}
     character(len=STDLEN)     :: sigma_est='group'    !< sigma estimation kind (group|global){group}
     character(len=STDLEN)     :: sort=''              !< key to sort oris on
     character(len=STDLEN)     :: speckind='sqrt'      !< power spectrum kind(real|power|sqrt|log|phase){sqrt}
@@ -1518,7 +1518,14 @@ contains
             self%l_filemsk = .true.  ! indicate file is inputted
         endif
         ! comlin generation
-        self%l_comlin = (trim(self%ref_type).eq.'clin' .or. trim(self%ref_type).eq.'cavg_clin')
+        select case(trim(self%ref_type))
+        case('clin', 'vol')
+            self%l_comlin = .true.  ! 3D
+        case('cavg')
+            self%l_comlin = .false. ! 2D
+        case DEFAULT
+            THROW_HARD('Unsupported REF_TYPE argument: '//trim(self%ref_type))
+        end select
         ! image normalization
         self%l_noise_norm = trim(self%noise_norm).eq.'yes'
         ! set lpset flag
