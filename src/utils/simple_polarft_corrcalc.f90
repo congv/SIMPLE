@@ -2197,23 +2197,35 @@ contains
         class(polarft_corrcalc), intent(inout) :: self
         integer,                 intent(in)    :: iptcl, iref
         real(sp),                intent(out)   :: euclids(self%nrots)
-        real(dp) :: w, sumsqptcl
+        real(dp) :: w, sumsqptcl, scale
         integer  :: k, i, ithr
         logical  :: even
         ithr = omp_get_thread_num() + 1
         i    = self%pinds(iptcl)
         even = self%iseven(i)
         self%heap_vars(ithr)%kcorrs = 0.d0
+        scale = 1._dp
+        if( trim(params_glob%polar_scale).eq.'yes' )then
+            if( dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp))) > TINY )then
+                if( even )then
+                    scale = dsqrt(sum(real(self%pfts_refs_even(:,:,iref)*self%ctfmats(:,:,i)*conjg(self%pfts_refs_even(:,:,iref)*self%ctfmats(:,:,i)),dp))) /&
+                        &dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp)))
+                else
+                    scale = dsqrt(sum(real(self%pfts_refs_odd(:,:,iref)*self%ctfmats(:,:,i)*conjg(self%pfts_refs_odd(:,:,iref)*self%ctfmats(:,:,i)),dp))) /&
+                        &dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp)))
+                endif
+            endif
+        endif
         do k = self%kfromto(1),self%kfromto(2)
             w         = real(k,dp) / real(self%sigma2_noise(k,iptcl),dp)
-            sumsqptcl = sum(real(self%pfts_ptcls(:,k,i)*conjg(self%pfts_ptcls(:,k,i)),dp))
+            sumsqptcl = scale**2 * sum(real(self%pfts_ptcls(:,k,i)*conjg(self%pfts_ptcls(:,k,i)),dp))
             ! FT(CTF2) x FT(REF2)* - 2 * FT(X.CTF) x FT(REF)*
             if( even )then
                 self%cvec1(ithr)%c = self%ft_ctf2(:,k,i)     * self%ft_ref2_even(:,k,iref) - &
-                                &2.0*self%ft_ptcl_ctf(:,k,i) * self%ft_ref_even(:,k,iref)
+                                &2.0*scale*self%ft_ptcl_ctf(:,k,i) * self%ft_ref_even(:,k,iref)
             else
                 self%cvec1(ithr)%c = self%ft_ctf2(:,k,i)     * self%ft_ref2_odd(:,k,iref) - &
-                                &2.0*self%ft_ptcl_ctf(:,k,i) * self%ft_ref_odd(:,k,iref)
+                                &2.0*scale*self%ft_ptcl_ctf(:,k,i) * self%ft_ref_odd(:,k,iref)
             endif
             ! X.CTF.REF = IFFT( FT(CTF2) x FT(REF2)* - 2 * FT(X.CTF) x FT(REF)* )
             call fftwf_execute_dft_c2r(self%plan_bwd1, self%cvec1(ithr)%c, self%rvec1(ithr)%r)
@@ -2222,7 +2234,7 @@ contains
             ! k/sig2 x ( |X|2 + |CTF.REF|2 - 2.X.CTF.REF )
             self%heap_vars(ithr)%kcorrs = self%heap_vars(ithr)%kcorrs + w * sumsqptcl + self%drvec(ithr)%r
         end do
-        euclids = real( dexp( -self%heap_vars(ithr)%kcorrs / self%wsqsums_ptcls(i) ) )
+        euclids = real( dexp( -self%heap_vars(ithr)%kcorrs / (scale**2 * self%wsqsums_ptcls(i) )) )
     end subroutine gencorrs_euclid_1
 
     subroutine gencorrs_euclid_2( self, iptcl, irefs, prefs, euclids )
@@ -2261,16 +2273,22 @@ contains
         complex(sp), pointer,    intent(in)    :: pft_ref(:,:)
         integer,                 intent(in)    :: iptcl, iref
         real(sp),                intent(out)   :: euclids(self%nrots)
-        real(dp) :: w, sumsqptcl
+        real(dp) :: w, sumsqptcl, scale
         integer  :: k, i, ithr
         logical  :: even
         ithr = omp_get_thread_num() + 1
         i    = self%pinds(iptcl)
         even = self%iseven(i)
         self%heap_vars(ithr)%kcorrs = 0.d0
+        scale = 1._dp
+        if( trim(params_glob%polar_scale).eq.'yes' )then
+            if( dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp))) > DTINY )then
+                scale = dsqrt(sum(real(pft_ref*self%ctfmats(:,:,i)*conjg(pft_ref*self%ctfmats(:,:,i)),dp))) / dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp)))
+            endif
+        endif
         do k = self%kfromto(1),self%kfromto(2)
             w         = real(k,dp) / real(self%sigma2_noise(k,iptcl),dp)
-            sumsqptcl = sum(real(self%pfts_ptcls(:,k,i)*conjg(self%pfts_ptcls(:,k,i)),dp))
+            sumsqptcl = scale**2 * sum(real(self%pfts_ptcls(:,k,i)*conjg(self%pfts_ptcls(:,k,i)),dp))
             ! FT(CTF2) x FT(REF2)*
             if( even )then
                 self%cvec1(ithr)%c = self%ft_ctf2(:,k,i) * self%ft_ref2_even(:,k,iref)
@@ -2282,7 +2300,7 @@ contains
             self%cvec2(ithr)%c(self%pftsz+1:self%nrots) = conjg(pft_ref(:,k))
             call fftwf_execute_dft(self%plan_fwd1, self%cvec2(ithr)%c, self%cvec2(ithr)%c)
             ! FT(CTF2) x FT(REF2)* - 2 * FT(X.CTF) x FT(REF)*
-            self%cvec1(ithr)%c = self%cvec1(ithr)%c - 2.0 * self%ft_ptcl_ctf(:,k,i) * conjg(self%cvec2(ithr)%c(1:self%pftsz+1))
+            self%cvec1(ithr)%c = self%cvec1(ithr)%c - 2.0 * scale * self%ft_ptcl_ctf(:,k,i) * conjg(self%cvec2(ithr)%c(1:self%pftsz+1))
             ! IFFT( FT(CTF2) x FT(REF2)* - 2 * FT(X.CTF) x FT(REF)* )
             call fftwf_execute_dft_c2r(self%plan_bwd1, self%cvec1(ithr)%c, self%rvec1(ithr)%r)
             ! k/sig2 x ( |CTF.REF|2 - 2X.CTF.REF ), fftw normalized
@@ -2290,7 +2308,7 @@ contains
             ! k/sig2 x ( |X|2 + |CTF.REF|2 - 2X.CTF.REF )
             self%heap_vars(ithr)%kcorrs = self%heap_vars(ithr)%kcorrs + w * sumsqptcl + self%drvec(ithr)%r
         end do
-        euclids = real( dexp( -self%heap_vars(ithr)%kcorrs / self%wsqsums_ptcls(i) ) )
+        euclids = real( dexp( -self%heap_vars(ithr)%kcorrs / (scale**2*self%wsqsums_ptcls(i)) ) )
     end subroutine gencorrs_shifted_euclid_1
 
     subroutine gencorrs_shifted_euclid_2( self, pft_ref, iptcl, irefs, prefs, euclids )
@@ -2587,15 +2605,22 @@ contains
         class(polarft_corrcalc), intent(inout) :: self
         complex(dp), pointer,    intent(inout) :: pft_ref(:,:)
         integer,                 intent(in)    :: iptcl
+        real(dp) :: scale
         integer  :: i,k
-        i       = self%pinds(iptcl)
-        pft_ref = pft_ref - self%pfts_ptcls(:,:,i)
+        i     = self%pinds(iptcl)
+        scale = 1._dp
+        if( trim(params_glob%polar_scale).eq.'yes' )then
+            if( dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp))) > DTINY )then
+                scale = dsqrt(sum(real(pft_ref*conjg(pft_ref),dp))) / dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp)))
+            endif
+        endif
+        pft_ref = pft_ref - scale * self%pfts_ptcls(:,:,i)
         gencorr_euclid_for_rot_8 = 0.d0
         do k = self%kfromto(1),self%kfromto(2)
             gencorr_euclid_for_rot_8 = gencorr_euclid_for_rot_8 +&
                 &(real(k,dp) / self%sigma2_noise(k,iptcl)) * sum(real(pft_ref(:,k)*conjg(pft_ref(:,k)),dp))
         end do
-        gencorr_euclid_for_rot_8 = dexp( -gencorr_euclid_for_rot_8 / self%wsqsums_ptcls(i) )
+        gencorr_euclid_for_rot_8 = dexp( -gencorr_euclid_for_rot_8 / (scale**2*self%wsqsums_ptcls(i)) )
     end function gencorr_euclid_for_rot_8
 
     ! pfts_refs_* are already rotated/shifted
