@@ -3368,7 +3368,8 @@ contains
         integer,                 intent(in)    :: irot
         real(sp),      optional, intent(out)   :: sigma_contrib(self%kfromto(1):self%kfromto(2))
         complex(dp), pointer :: pft_ref_8(:,:), shmat_8(:,:), pft_ref_tmp_8(:,:)
-        integer :: i,ithr
+        integer  :: i,ithr
+        real(dp) :: scale
         i    = self%pinds(iptcl)
         ithr = omp_get_thread_num() + 1
         pft_ref_8     => self%heap_vars(ithr)%pft_ref_8
@@ -3387,8 +3388,15 @@ contains
         call self%rotate_pft(pft_ref_8, irot, pft_ref_tmp_8)
         ! ctf
         if( self%with_ctf ) pft_ref_tmp_8 = pft_ref_tmp_8 * real(self%ctfmats(:,:,i),dp)
+        ! energy scaling
+        scale = 1._dp
+        if( trim(params_glob%polar_scale).eq.'yes' )then
+            if( dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp))) > DTINY )then
+                scale = dsqrt(sum(real(pft_ref_tmp_8*conjg(pft_ref_tmp_8),dp))) / dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp)))
+            endif
+        endif
         ! difference
-        pft_ref_tmp_8 = pft_ref_tmp_8 - self%pfts_ptcls(:,:,i)
+        pft_ref_tmp_8 = pft_ref_tmp_8 - scale * self%pfts_ptcls(:,:,i)
         ! sigma2
         if( present(sigma_contrib) )then
             sigma_contrib = real(sum(real(pft_ref_tmp_8 * conjg(pft_ref_tmp_8),dp), dim=1) / (2.d0*real(self%pftsz,dp)))
