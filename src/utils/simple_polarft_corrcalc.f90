@@ -78,7 +78,6 @@ type :: polarft_corrcalc
     complex(kind=c_float_complex), allocatable :: ft_ptcl_ctf(:,:,:)    !< Fourier Transform of particle times CTF
     complex(kind=c_float_complex), allocatable :: ft_absptcl_ctf(:,:,:) !< Fourier Transform of (particle times CTF)**2
     complex(kind=c_float_complex), allocatable :: ft_ctf2(:,:,:)        !< Fourier Transform of CTF squared modulus
-    complex(kind=c_float_complex), allocatable :: ft_ctf(:,:,:)         !< Fourier Transform of CTF modulus
     complex(kind=c_float_complex), allocatable :: ft_ref_even(:,:,:),     ft_ref_odd(:,:,:)     !< Fourier Transform of even/odd references
     complex(kind=c_float_complex), allocatable :: ft_ref2_even(:,:,:),    ft_ref2_odd(:,:,:)    !< Fourier Transform of even/odd references squared modulus
     complex(kind=c_float_complex), allocatable :: ft_refs2_even(:,:,:,:), ft_refs2_odd(:,:,:,:) !< Fourier Transform of even/odd references of different pairs
@@ -1161,15 +1160,6 @@ contains
                 endif
                 call fftwf_execute_dft_r2c(self%plan_mem_r2c, self%rvec1(ithr)%r, self%cvec1(ithr)%c)
                 self%ft_ctf2(:,k,i) = self%cvec1(ithr)%c(1:self%pftsz+1)
-                ! FT(CTF)
-                if( self%with_ctf )then
-                    self%rvec1(ithr)%r(1:self%pftsz)            = self%ctfmats(:,k,i)
-                    self%rvec1(ithr)%r(self%pftsz+1:self%nrots) = self%rvec1(ithr)%r(1:self%pftsz)
-                else
-                    self%rvec1(ithr)%r = 1.0
-                endif
-                call fftwf_execute_dft_r2c(self%plan_mem_r2c, self%rvec1(ithr)%r, self%cvec1(ithr)%c)
-                self%ft_ctf(:,k,i) = self%cvec1(ithr)%c(1:self%pftsz+1)
                 if( l_memoize_absptcl_ctf )then
                     if( self%with_ctf )then
                         self%cvec2(ithr)%c(1:self%pftsz) = abs(self%pfts_ptcls(:,k,i)) * self%ctfmats(:,k,i)
@@ -1270,7 +1260,6 @@ contains
     subroutine allocate_ptcls_memoization( self )
         class(polarft_corrcalc), intent(inout) :: self
         allocate(self%ft_ptcl_ctf(self%pftsz+1,self%kfromto(1):self%kfromto(2),self%nptcls),&
-                &self%ft_ctf(     self%pftsz+1,self%kfromto(1):self%kfromto(2),self%nptcls),&
                 &self%ft_ctf2(    self%pftsz+1,self%kfromto(1):self%kfromto(2),self%nptcls))
         if( trim(params_glob%sh_inv).eq.'yes' )then
             allocate(self%ft_absptcl_ctf(self%pftsz+1,self%kfromto(1):self%kfromto(2),self%nptcls))
@@ -2217,7 +2206,7 @@ contains
         self%heap_vars(ithr)%kcorrs = 0.d0
         scale = 1._dp
         if( trim(params_glob%polar_scale).eq.'yes' )then
-            if( dsqrt(self%ksqsums_ptcls(i)) > DTINY )then
+            if( dsqrt(self%sqsums_ptcls(i)) > DTINY )then
                 scale = 0._dp
                 do k = self%kfromto(1),self%kfromto(2)
                     ! FT(CTF2) x FT(REF2)*)
@@ -2228,9 +2217,9 @@ contains
                     endif
                     ! IFFT(FT(CTF2) x FT(REF2)*)
                     call fftwf_execute_dft_c2r(self%plan_bwd1, self%cvec1(ithr)%c, self%rvec1(ithr)%r)
-                    scale = scale + real(k,dp) * real(self%rvec1(ithr)%r(1:self%nrots),dp)
+                    scale = scale + real(self%rvec1(ithr)%r(1:self%nrots),dp)
                 enddo
-                scale = dsqrt(scale / real(2*self%nrots,dp)) / dsqrt(self%ksqsums_ptcls(i))
+                scale = dsqrt(scale / real(2*self%nrots,dp)) / dsqrt(self%sqsums_ptcls(i))
             else
                 scale = 1._dp
             endif
@@ -2255,6 +2244,7 @@ contains
             endif
             ! IFFT( 2 * FT(X.CTF) x FT(REF)* )
             call fftwf_execute_dft_c2r(self%plan_bwd1, self%cvec1(ithr)%c, self%rvec1(ithr)%r)
+            ! |CTF.REF|2 - 2.X.CTF.REF
             self%drvec(ithr)%r(1:self%nrots) = self%drvec(ithr)%r(1:self%nrots) - self%rvec1(ithr)%r(1:self%nrots) * scale
             ! k/sig2 x ( |CTF.REF|2 - 2.X.CTF.REF ), fftw normalized
             self%drvec(ithr)%r = (w / real(2*self%nrots,dp)) * real(self%drvec(ithr)%r(1:self%nrots),dp)
@@ -2309,7 +2299,7 @@ contains
         self%heap_vars(ithr)%kcorrs = 0.d0
         scale = 1._dp
         if( trim(params_glob%polar_scale).eq.'yes' )then
-            if( dsqrt(self%ksqsums_ptcls(i)) > DTINY )then
+            if( dsqrt(self%sqsums_ptcls(i)) > DTINY )then
                 scale = 0._dp
                 do k = self%kfromto(1),self%kfromto(2)
                     ! FT(CTF2) x FT(REF2)), REF2 is shift invariant
@@ -2320,9 +2310,9 @@ contains
                     endif
                     ! IFFT(FT(CTF2) x FT(REF2))
                     call fftwf_execute_dft_c2r(self%plan_bwd1, self%cvec1(ithr)%c, self%rvec1(ithr)%r)
-                    scale = scale + real(k,dp) * real(self%rvec1(ithr)%r(1:self%nrots),dp)
+                    scale = scale + real(self%rvec1(ithr)%r(1:self%nrots),dp)
                 enddo
-                scale = dsqrt(scale / real(2*self%nrots,dp)) / dsqrt(self%ksqsums_ptcls(i))
+                scale = dsqrt(scale / real(2*self%nrots,dp)) / dsqrt(self%sqsums_ptcls(i))
             else
                 scale = 1._dp
             endif
@@ -2347,6 +2337,7 @@ contains
             self%cvec1(ithr)%c = 2.0 * self%ft_ptcl_ctf(:,k,i) * conjg(self%cvec2(ithr)%c(1:self%pftsz+1))
             ! IFFT( 2 * FT(X.CTF) x FT(REF)* )
             call fftwf_execute_dft_c2r(self%plan_bwd1, self%cvec1(ithr)%c, self%rvec1(ithr)%r)
+            ! |CTF.REF|2 - 2X.CTF.REF
             self%drvec(ithr)%r(1:self%nrots) = self%drvec(ithr)%r(1:self%nrots) - self%rvec1(ithr)%r(1:self%nrots) * scale
             ! k/sig2 x ( |CTF.REF|2 - 2X.CTF.REF ), fftw normalized
             self%drvec(ithr)%r = (w / real(2*self%nrots,dp)) * real(self%drvec(ithr)%r(1:self%nrots),dp)
@@ -2655,12 +2646,12 @@ contains
         i     = self%pinds(iptcl)
         scale = 1._dp
         if( trim(params_glob%polar_scale).eq.'yes' )then
-            if( dsqrt(self%ksqsums_ptcls(i)) > DTINY )then
+            if( dsqrt(self%sqsums_ptcls(i)) > DTINY )then
                 scale = 0._dp
                 do k = self%kfromto(1),self%kfromto(2)
-                    scale = scale + real(k,dp) * sum(real(pft_ref(:,k)*conjg(pft_ref(:,k)),dp))
+                    scale = scale + sum(real(pft_ref(:,k)*conjg(pft_ref(:,k)),dp))
                 end do
-                scale = dsqrt(scale) / dsqrt(self%ksqsums_ptcls(i))
+                scale = dsqrt(scale) / dsqrt(self%sqsums_ptcls(i))
             endif
         endif
         pft_ref = pft_ref - scale * self%pfts_ptcls(:,:,i)
@@ -3440,12 +3431,12 @@ contains
         ! energy scaling
         scale = 1._dp
         if( trim(params_glob%polar_scale).eq.'yes' )then
-            if( dsqrt(self%ksqsums_ptcls(i)) > DTINY )then
+            if( dsqrt(self%sqsums_ptcls(i)) > DTINY )then
                 scale = 0._dp
                 do k = self%kfromto(1),self%kfromto(2)
-                    scale = scale + real(k,dp) * sum(real(pft_ref_tmp_8(:,k)*conjg(pft_ref_tmp_8(:,k)),dp))
+                    scale = scale + sum(real(pft_ref_tmp_8(:,k)*conjg(pft_ref_tmp_8(:,k)),dp))
                 end do
-                scale = dsqrt(scale) / dsqrt(self%ksqsums_ptcls(i))
+                scale = dsqrt(scale) / dsqrt(self%sqsums_ptcls(i))
             endif
         endif
         ! difference
