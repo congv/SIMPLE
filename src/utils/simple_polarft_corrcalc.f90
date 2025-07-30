@@ -2230,7 +2230,7 @@ contains
                 scale = scale + real(k,dp) * real(self%rvec1(ithr)%r(1:self%nrots),dp)
             enddo
             where( scale > DTINY )
-                scale = (self%sqsums_ptcls(i) * real(2*self%nrots,dp)) / scale
+                scale = (dsqrt(self%ksqsums_ptcls(i)) * real(2*self%nrots,dp)) / scale
             elsewhere
                 scale = 1._dp
             endwhere
@@ -2322,7 +2322,7 @@ contains
                 scale = scale + real(k,dp) * real(self%rvec1(ithr)%r(1:self%nrots),dp)
             enddo
             where( scale > DTINY )
-                scale = (self%ksqsums_ptcls(i) * real(2*self%nrots,dp)) / scale
+                scale = (dsqrt(self%ksqsums_ptcls(i)) * real(2*self%nrots,dp)) / scale
             elsewhere
                 scale = 1._dp
             endwhere
@@ -2655,8 +2655,12 @@ contains
         i     = self%pinds(iptcl)
         scale = 1._dp
         if( trim(params_glob%polar_scale).eq.'yes' )then
-            if( dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp))) > DTINY )then
-                scale = dsqrt(sum(real(pft_ref*conjg(pft_ref),dp))) / dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp)))
+            scale = 0._dp
+            if( dsqrt(self%ksqsums_ptcls(i)) > DTINY )then
+                do k = self%kfromto(1),self%kfromto(2)
+                    scale = scale + real(k,dp) * sum(real(pft_ref(:,k)*conjg(pft_ref(:,k)),dp))
+                end do
+                scale = dsqrt(scale) / dsqrt(self%ksqsums_ptcls(i))
             endif
         endif
         pft_ref = pft_ref - scale * self%pfts_ptcls(:,:,i)
@@ -3436,8 +3440,12 @@ contains
         ! energy scaling
         scale = 1._dp
         if( trim(params_glob%polar_scale).eq.'yes' )then
-            if( dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp))) > DTINY )then
-                scale = dsqrt(sum(real(pft_ref_tmp_8*conjg(pft_ref_tmp_8),dp))) / dsqrt(sum(real(self%pfts_ptcls(:,:,i)*conjg(self%pfts_ptcls(:,:,i)),dp)))
+            scale = 0._dp
+            if( dsqrt(self%ksqsums_ptcls(i)) > DTINY )then
+                do k = self%kfromto(1),self%kfromto(2)
+                    scale = scale + real(k,dp) * sum(real(pft_ref_tmp_8(:,k)*conjg(pft_ref_tmp_8(:,k)),dp))
+                end do
+                scale = dsqrt(scale) / dsqrt(self%ksqsums_ptcls(i))
             endif
         endif
         ! difference
