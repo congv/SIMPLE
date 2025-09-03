@@ -336,47 +336,63 @@ contains
             call img%norm_within(build_glob%lmsk)
         endif
         ! Fourier cropping
-        call img%fft()
-        call img%clip(img_out)
-        ! Shift image to rotational origin
-        crop_factor = real(params_glob%box_crop) / real(params_glob%box)
-        x = build_glob%spproj_field%get(iptcl, 'x') * crop_factor
-        y = build_glob%spproj_field%get(iptcl, 'y') * crop_factor
-        if(abs(x) > SHTHRESH .or. abs(y) > SHTHRESH)then
-            call img_out%shift2Dserial([-x,-y])
-        endif
-        ! Phase-flipping
-        ctfparms = build_glob%spproj%get_ctfparams(params_glob%oritype, iptcl)
-        select case(ctfparms%ctfflag)
-            case(CTFFLAG_NO, CTFFLAG_FLIP)
-                ! nothing to do
-            case(CTFFLAG_YES)
-                ctfparms%smpd = ctfparms%smpd / crop_factor != smpd_crop
-                tfun          = ctf(ctfparms%smpd, ctfparms%kv, ctfparms%cs, ctfparms%fraca)
-                call tfun%apply_serial(img_out, 'flip', ctfparms)
-            case DEFAULT
-                THROW_HARD('unsupported CTF flag: '//int2str(ctfparms%ctfflag)//' prepimg4align')
-        end select
-        ! Back to real space
-        call img_out%ifft
-        ! Soft-edged mask
-        if( params_glob%l_focusmsk )then
-            if( params_glob%l_needs_sigma )then
-                call img_out%mask(params_glob%focusmsk*crop_factor, 'softavg')
-            else
-                call img_out%mask(params_glob%focusmsk*crop_factor, 'soft')
-            endif
+        if( trim(params_glob%sh_sto).eq.'yes' )then
+            call img%fft()
+            ! Phase-flipping
+            ctfparms = build_glob%spproj%get_ctfparams(params_glob%oritype, iptcl)
+            select case(ctfparms%ctfflag)
+                case(CTFFLAG_NO, CTFFLAG_FLIP)
+                    ! nothing to do
+                case(CTFFLAG_YES)
+                    tfun = ctf(ctfparms%smpd, ctfparms%kv, ctfparms%cs, ctfparms%fraca)
+                    call tfun%apply_serial(img, 'flip', ctfparms)
+                case DEFAULT
+                    THROW_HARD('unsupported CTF flag: '//int2str(ctfparms%ctfflag)//' prepimg4align')
+            end select
+            call img%clip(img_out)
         else
-            if( params_glob%l_needs_sigma )then
-                call img_out%mask(params_glob%msk_crop, 'softavg')
-            else
-                call img_out%mask(params_glob%msk_crop, 'soft')
+            call img%fft()
+            call img%clip(img_out)
+            ! Shift image to rotational origin
+            crop_factor = real(params_glob%box_crop) / real(params_glob%box)
+            x = build_glob%spproj_field%get(iptcl, 'x') * crop_factor
+            y = build_glob%spproj_field%get(iptcl, 'y') * crop_factor
+            if(abs(x) > SHTHRESH .or. abs(y) > SHTHRESH)then
+                call img_out%shift2Dserial([-x,-y])
             endif
+            ! Phase-flipping
+            ctfparms = build_glob%spproj%get_ctfparams(params_glob%oritype, iptcl)
+            select case(ctfparms%ctfflag)
+                case(CTFFLAG_NO, CTFFLAG_FLIP)
+                    ! nothing to do
+                case(CTFFLAG_YES)
+                    ctfparms%smpd = ctfparms%smpd / crop_factor != smpd_crop
+                    tfun          = ctf(ctfparms%smpd, ctfparms%kv, ctfparms%cs, ctfparms%fraca)
+                    call tfun%apply_serial(img_out, 'flip', ctfparms)
+                case DEFAULT
+                    THROW_HARD('unsupported CTF flag: '//int2str(ctfparms%ctfflag)//' prepimg4align')
+            end select
+            ! Back to real space
+            call img_out%ifft
+            ! Soft-edged mask
+            if( params_glob%l_focusmsk )then
+                if( params_glob%l_needs_sigma )then
+                    call img_out%mask(params_glob%focusmsk*crop_factor, 'softavg')
+                else
+                    call img_out%mask(params_glob%focusmsk*crop_factor, 'soft')
+                endif
+            else
+                if( params_glob%l_needs_sigma )then
+                    call img_out%mask(params_glob%msk_crop, 'softavg')
+                else
+                    call img_out%mask(params_glob%msk_crop, 'soft')
+                endif
+            endif
+            ! gridding prep
+            if( params_glob%gridding.eq.'yes' ) call build_glob%img_crop_polarizer%div_by_instrfun(img_out)
+            ! return to Fourier space
+            call img_out%fft()
         endif
-        ! gridding prep
-        if( params_glob%gridding.eq.'yes' ) call build_glob%img_crop_polarizer%div_by_instrfun(img_out)
-        ! return to Fourier space
-        call img_out%fft()
     end subroutine prepimg4align
 
     !>  \brief  prepares one cluster centre image for alignment

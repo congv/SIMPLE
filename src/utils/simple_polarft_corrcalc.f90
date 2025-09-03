@@ -828,16 +828,30 @@ contains
 
     ! MODIFIERS
 
-    subroutine shift_ptcl( self, iptcl, shvec)
+    subroutine shift_ptcl( self, iptcl, shvec, sh_sto, prev_sh)
         class(polarft_corrcalc), intent(inout) :: self
         integer,                 intent(in)    :: iptcl
         real(sp),                intent(in)    :: shvec(2)
+        logical,     optional,   intent(in)    :: sh_sto
+        real,        optional,   intent(in)    :: prev_sh(2)
         complex(sp), pointer :: shmat(:,:)
-        integer :: ithr, i
+        integer :: ithr, i, k, rot
+        logical :: l_sh_sto
+        real    :: eps
         ithr  = omp_get_thread_num() + 1
         i     = self%pinds(iptcl)
         shmat => self%heap_vars(ithr)%shmat
         call self%gen_shmat(ithr, shvec, shmat)
+        l_sh_sto = .false.
+        if( present(sh_sto) )l_sh_sto = sh_sto
+        if( l_sh_sto )then
+            eps = arg(shvec-prev_sh)/arg(2.*[params_glob%trs, params_glob%trs])
+            do k = self%kfromto(1),self%kfromto(2)
+                do rot = 1, self%pftsz
+                    if( ran3() < eps ) shmat(rot,k) = zero
+                enddo
+            enddo
+        endif
         self%pfts_ptcls(:,:,i) = self%pfts_ptcls(:,:,i) * shmat
     end subroutine shift_ptcl
 

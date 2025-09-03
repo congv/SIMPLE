@@ -123,6 +123,7 @@ type :: parameters
     character(len=3)          :: shbarrier='yes'      !< use shift search barrier constraint(yes|no){yes}
     character(len=3)          :: sh_first='no'        !< shifting before orientation search(yes|no){no}
     character(len=3)          :: sh_inv='no'          !< whether to use shift invariant metric for projection direction assignment(yes|no){no}
+    character(len=3)          :: sh_sto='no'          !< stochastic shift update of particles(yes|no){no}
     character(len=3)          :: sort_asc='yes'       !< sort oris ascending
     character(len=3)          :: srch_oris='yes'      !< whether to search orientations in multivolume assignment(yes|no){yes} 
     character(len=3)          :: stream='no'          !< stream (real time) execution mode(yes|no){no}
@@ -745,6 +746,7 @@ contains
         call check_carg('shbarrier',      self%shbarrier)
         call check_carg('sh_first',       self%sh_first)
         call check_carg('sh_inv',         self%sh_inv)
+        call check_carg('sh_sto',         self%sh_sto)
         call check_carg('sigma_est',      self%sigma_est)
         call check_carg('snapshot',       self%snapshot)
         call check_carg('sort',           self%sort)

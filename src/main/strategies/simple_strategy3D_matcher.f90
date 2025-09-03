@@ -62,7 +62,7 @@ contains
         type(strategy3D_spec),     allocatable :: strategy3Dspecs(:)
         type(class_sample),        allocatable :: clssmp(:)
         integer,                   allocatable :: batches(:,:), cnt_greedy(:), cnt_all(:)
-        real,                      allocatable :: incr_shifts(:,:)
+        real,                      allocatable :: incr_shifts(:,:), prev_shifts(:,:)
         type(convergence) :: conv
         type(ori)         :: orientation
         real    :: frac_greedy
@@ -159,7 +159,7 @@ contains
         ! BATCH LOOP
         write(logfhandle,'(A,1X,I3)') '>>> REFINE3D SEARCH, ITERATION:', which_iter
         allocate(cnt_greedy(params_glob%nthr), cnt_all(params_glob%nthr), source=0)
-        allocate(incr_shifts(2,batchsz_max),source=0.)
+        allocate(incr_shifts(2,batchsz_max),prev_shifts(2,batchsz_max),source=0.)
         do ibatch=1,nbatches
             batch_start = batches(ibatch,1)
             batch_end   = batches(ibatch,2)
@@ -222,7 +222,9 @@ contains
                     call strategy3Dsrch(iptcl_batch)%ptr%new(strategy3Dspecs(iptcl_batch))
                     call strategy3Dsrch(iptcl_batch)%ptr%srch(ithr)
                     ! keep track of incremental shift
-                    incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl) - strategy3Dsrch(iptcl_batch)%ptr%s%prev_shvec
+                    ! incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl) - strategy3Dsrch(iptcl_batch)%ptr%s%prev_shvec
+                    incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl)
+                    prev_shifts(:,iptcl_batch) = strategy3Dsrch(iptcl_batch)%ptr%s%prev_shvec
                     ! cleanup
                     call strategy3Dsrch(iptcl_batch)%ptr%kill
                 endif
@@ -239,7 +241,7 @@ contains
             if( l_polar .and. l_restore )then
                 if( L_BENCH_GLOB ) t_rec = tic()
                 call polar_cavger_update_sums(batchsz, pinds(batch_start:batch_end),&
-                    &build_glob%spproj, pftcc, incr_shifts(:,1:batchsz), is3D=.true.)
+                    &build_glob%spproj, pftcc, incr_shifts(:,1:batchsz), is3D=.true., prev_shifts=prev_shifts(:,1:batchsz))
                 if( L_BENCH_GLOB ) rt_rec = rt_rec + toc(t_rec)
             endif
         enddo
