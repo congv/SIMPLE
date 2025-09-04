@@ -828,16 +828,17 @@ contains
 
     ! MODIFIERS
 
-    subroutine shift_ptcl( self, iptcl, shvec, sh_sto, prev_sh)
+    subroutine shift_ptcl( self, iptcl, shvec, sh_sto, prev_sh, inpl_dist)
         class(polarft_corrcalc), intent(inout) :: self
         integer,                 intent(in)    :: iptcl
         real(sp),                intent(in)    :: shvec(2)
         logical,     optional,   intent(in)    :: sh_sto
         real,        optional,   intent(in)    :: prev_sh(2)
+        real,        optional,   intent(in)    :: inpl_dist
         complex(sp), pointer :: shmat(:,:)
         integer :: ithr, i, k, rot
         logical :: l_sh_sto
-        real    :: eps
+        real    :: eps, eps_inpl
         ithr  = omp_get_thread_num() + 1
         i     = self%pinds(iptcl)
         shmat => self%heap_vars(ithr)%shmat
@@ -845,8 +846,14 @@ contains
         l_sh_sto = .false.
         if( present(sh_sto) )l_sh_sto = sh_sto
         if( l_sh_sto )then
-            eps = arg(shvec-prev_sh)/arg(2.*[params_glob%trs, params_glob%trs])
+            eps_inpl = 0.
+            eps      = arg(shvec-prev_sh)/arg(2.*[params_glob%trs, params_glob%trs])
+            if( present(inpl_dist) )eps_inpl = inpl_dist/180.
             do k = self%kfromto(1),self%kfromto(2)
+                if( ran3() < eps_inpl )then
+                    shmat(:,k) = zero
+                    cycle
+                endif
                 do rot = 1, self%pftsz
                     if( ran3() < eps ) shmat(rot,k) = zero
                 enddo

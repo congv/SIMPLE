@@ -3158,9 +3158,9 @@ contains
         logical,          intent(out)   :: err
         real,    allocatable :: vals(:)
         integer, allocatable :: states(:)
-        states        = self%get_all_asint('state')
-        vals          = self%get_all(which)
-        vals          = pack(vals, mask=states > 0)
+        states = self%get_all_asint('state')
+        vals   = self%get_all(which)
+        vals   = pack(vals, mask=states > 0)
         call moment(vals, ave, sdev, var, err)
         deallocate(vals, states)
     end subroutine stats_1
@@ -3178,9 +3178,9 @@ contains
         real    :: var
         nnozero = .false.
         if( present(nozero) ) nnozero = nozero
-        vals          = self%get_all(which)
-        states        = self%get_all_asint('state')
-        vals          = pack(vals, states > 0 .and. mask)
+        vals   = self%get_all(which)
+        states = self%get_all_asint('state')
+        vals   = pack(vals, states > 0 .and. mask)
         if( nnozero ) vals = pack(vals, mask=vals(:) > TINY)
         call moment(vals, statvars%avg, statvars%sdev, var, err)
         statvars%minv = minval(vals)

@@ -133,7 +133,7 @@ contains
     end subroutine polar_cavger_calc_pops
 
     !>  \brief  Updates Fourier components and normalization matrices with new particles
-    subroutine polar_cavger_update_sums( nptcls, pinds, spproj, pftcc, incr_shifts, is3D, prev_shifts )
+    subroutine polar_cavger_update_sums( nptcls, pinds, spproj, pftcc, incr_shifts, is3D, prev_shifts, os )
         integer,                         intent(in)    :: nptcls
         integer,                         intent(in)    :: pinds(nptcls)
         class(sp_project),               intent(inout) :: spproj
@@ -141,13 +141,14 @@ contains
         real,                            intent(in)    :: incr_shifts(2,nptcls)
         logical,               optional, intent(in)    :: is3d
         real,                  optional, intent(in)    :: prev_shifts(2,nptcls)
+        type(oris),            optional, intent(in)    :: os
         class(oris), pointer :: spproj_field
         complex(sp), pointer :: pptcls(:,:,:), rptcl(:,:)
         real(sp),    pointer :: pctfmats(:,:,:), rctf(:,:)
         real(dp) :: w
-        real     :: incr_shift(2), prev_shift(2)
+        real     :: incr_shift(2), prev_shift(2), inpl_dist
         integer  :: i, icls, iptcl, irot
-        logical  :: l_ctf, l_even, l_3D, l_sh_sto
+        logical  :: l_ctf, l_even, l_3D, l_sh_sto, l_sto
         l_3D = .false.
         if( present(is3D) ) l_3D = is3D
         ! retrieve particle info & pointers
@@ -159,12 +160,19 @@ contains
             call pftcc%get_work_rpft_ptr(rctf)
         endif
         call pftcc%get_work_pft_ptr(rptcl)
-        l_sh_sto = .false.
+        l_sh_sto  = .false.
+        l_sto     = .false.
+        inpl_dist = 0.
         if( trim(params_glob%sh_sto).eq.'yes' .and. present(prev_shifts) )l_sh_sto = .true.
+        if( present(os) )l_sto = trim(params_glob%polar_sto).eq.'yes'
         ! update classes
         do i = 1,nptcls
-            ! particles parameters
             iptcl = pinds(i)
+            if( l_sto )then
+                if( ran3() < os%get(iptcl, 'dist')/180. )cycle
+                inpl_dist = os%get(iptcl, 'dist_inpl')
+            endif
+            ! particles parameters
             if( spproj_field%get_state(iptcl) == 0  ) cycle
             w = real(spproj_field%get(iptcl,'w'),dp)
             if( w < DSMALL ) cycle
@@ -179,7 +187,13 @@ contains
             ! weighted restoration
             if( l_sh_sto )then
                 prev_shift = prev_shifts(:,i)
-                if( any(abs(incr_shift) > 1.e-6) ) call pftcc%shift_ptcl(iptcl, -incr_shift, sh_sto=l_sh_sto, prev_sh=-prev_shift)
+                if( any(abs(incr_shift) > 1.e-6) )then
+                    if( l_sto )then
+                        call pftcc%shift_ptcl(iptcl, -incr_shift, sh_sto=l_sh_sto, prev_sh=-prev_shift, inpl_dist=inpl_dist)
+                    else
+                        call pftcc%shift_ptcl(iptcl, -incr_shift, sh_sto=l_sh_sto, prev_sh=-prev_shift)
+                    endif
+                endif
             else
                 if( any(abs(incr_shift) > 1.e-6) ) call pftcc%shift_ptcl(iptcl, -incr_shift)
             endif

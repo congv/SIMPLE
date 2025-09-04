@@ -222,9 +222,12 @@ contains
                     call strategy3Dsrch(iptcl_batch)%ptr%new(strategy3Dspecs(iptcl_batch))
                     call strategy3Dsrch(iptcl_batch)%ptr%srch(ithr)
                     ! keep track of incremental shift
-                    ! incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl) - strategy3Dsrch(iptcl_batch)%ptr%s%prev_shvec
-                    incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl)
-                    prev_shifts(:,iptcl_batch) = strategy3Dsrch(iptcl_batch)%ptr%s%prev_shvec
+                    if( trim(params_glob%sh_sto).eq.'yes' )then
+                        incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl)
+                        prev_shifts(:,iptcl_batch) = strategy3Dsrch(iptcl_batch)%ptr%s%prev_shvec
+                    else
+                        incr_shifts(:,iptcl_batch) = build_glob%spproj_field%get_2Dshift(iptcl) - strategy3Dsrch(iptcl_batch)%ptr%s%prev_shvec
+                    endif
                     ! cleanup
                     call strategy3Dsrch(iptcl_batch)%ptr%kill
                 endif
@@ -241,7 +244,8 @@ contains
             if( l_polar .and. l_restore )then
                 if( L_BENCH_GLOB ) t_rec = tic()
                 call polar_cavger_update_sums(batchsz, pinds(batch_start:batch_end),&
-                    &build_glob%spproj, pftcc, incr_shifts(:,1:batchsz), is3D=.true., prev_shifts=prev_shifts(:,1:batchsz))
+                    &build_glob%spproj, pftcc, incr_shifts(:,1:batchsz), is3D=.true.,&
+                    &prev_shifts=prev_shifts(:,1:batchsz), os=build_glob%spproj_field)
                 if( L_BENCH_GLOB ) rt_rec = rt_rec + toc(t_rec)
             endif
         enddo
