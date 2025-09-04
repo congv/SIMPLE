@@ -168,10 +168,7 @@ contains
         ! update classes
         do i = 1,nptcls
             iptcl = pinds(i)
-            if( l_sto )then
-                if( ran3() < os%get(iptcl, 'dist')/180. )cycle
-                inpl_dist = os%get(iptcl, 'dist_inpl')
-            endif
+            if( l_sto )inpl_dist = os%get(iptcl, 'dist')
             ! particles parameters
             if( spproj_field%get_state(iptcl) == 0  ) cycle
             w = real(spproj_field%get(iptcl,'w'),dp)
