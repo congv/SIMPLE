@@ -49,14 +49,14 @@ contains
         integer :: ldim(3), ldim_thumb(3), iptcl, nxpatch, nypatch
         logical :: patch_success, l_tseries
         patch_success = .false.
-        l_tseries = .false.
+        l_tseries     = .false.
         if( present(tseries) ) l_tseries = tseries.eq.'yes'
         ! check, increment counter & print
         if( .not. file_exists(moviename) )then
             write(logfhandle,*) 'inputted movie stack does not exist: ', trim(moviename)
         endif
         ! sanity check
-        if( fname2format(self%moviename) .eq. 'K' )then
+        if( fname2format(moviename) .eq. 'K' )then
             ! eer movie
             if( (.not.params_glob%l_dose_weight) .and. (.not.cline%defined('eer_fraction')) )then
                 THROW_HARD('eer_fraction must be defined!')
@@ -73,9 +73,9 @@ contains
             fbody_here = get_fbody(trim(fbody_here), trim(ext))
         endif
         ! shifts & star output
-        patched_shift_fname = trim(dir_out)//trim(adjustl(fbody_here))//'_shifts.eps'
-        star_fname          = trim(dir_out)//trim(adjustl(fbody_here))//trim(STAR_EXT)
-        poly_fname          = trim(dir_out)//trim(adjustl(fbody_here))//'.poly'
+        patched_shift_fname   = trim(dir_out)//trim(adjustl(fbody_here))//'_shifts.eps'
+        star_fname            = trim(dir_out)//trim(adjustl(fbody_here))//trim(STAR_EXT)
+        poly_fname            = trim(dir_out)//trim(adjustl(fbody_here))//'.poly'
         ! isotropic ones
         self%moviename_intg   = trim(dir_out)//trim(adjustl(fbody_here))//INTGMOV_SUFFIX//trim(params_glob%ext)
         self%moviename_forctf = trim(dir_out)//trim(adjustl(fbody_here))//FORCTF_SUFFIX//trim(params_glob%ext)
@@ -202,12 +202,15 @@ contains
         else
             call self%pspec_half_n_half%scale_pspec4viz
         endif
+        call self%pspec_sum%kill
+        call self%pspec_ctf%kill
         ! write output
         call self%moviesum_corrected%write(self%moviename_intg)
         if( .not. l_tseries ) call self%moviesum_ctf%write(self%moviename_forctf)
+        call self%moviesum_ctf%kill
         ! generate thumbnail
-        ldim  = self%moviesum_corrected%get_ldim()
-        scale = real(GUI_PSPECSZ)/maxval(ldim(1:2))
+        ldim            = self%moviesum_corrected%get_ldim()
+        scale           = real(GUI_PSPECSZ)/maxval(ldim(1:2))
         ldim_thumb(1:2) = round2even(real(ldim(1:2))*scale)
         ldim_thumb(3)   = 1
         call orientation%set('smpd', ctfvars%smpd)
@@ -217,9 +220,13 @@ contains
         call self%moviesum_corrected%fft()
         call self%moviesum_corrected%clip(self%thumbnail)
         call self%thumbnail%ifft()
+        call self%moviesum_corrected%kill
         ! jpeg output
         call self%pspec_half_n_half%collage(self%thumbnail, self%img_jpg)
         call self%img_jpg%write_jpg(self%moviename_thumb, norm=.true., quality=92)
+        call self%pspec_half_n_half%kill
+        call self%thumbnail%kill
+        call self%img_jpg%kill
         ! report to ori object
         if( .not. l_tseries )then
             call orientation%set('movie',       simple_abspath(self%moviename))

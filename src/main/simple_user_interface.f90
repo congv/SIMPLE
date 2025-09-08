@@ -102,6 +102,7 @@ type(simple_program), target :: center2D_nano
 type(simple_program), target :: check_states
 type(simple_program), target :: consolidate_chunks
 type(simple_program), target :: conv_atom_denoise
+type(simple_program), target :: clin_fsc
 type(simple_program), target :: cluster2D
 type(simple_program), target :: cluster2D_nano
 type(simple_program), target :: cluster2D_subsets
@@ -267,7 +268,6 @@ type(simple_input_param) :: fraction_dose_target
 type(simple_input_param) :: frcs
 type(simple_input_param) :: gainref
 type(simple_input_param) :: graphene_filt
-type(simple_input_param) :: groupframes
 type(simple_input_param) :: hp
 type(simple_input_param) :: icefracthreshold
 type(simple_input_param) :: icm
@@ -436,6 +436,7 @@ contains
         call new_check_states
         call new_consolidate_chunks
         call new_conv_atom_denoise
+        call new_clin_fsc
         call new_cluster2D
         call new_cluster2D_nano
         call new_cluster2D_subsets
@@ -588,6 +589,7 @@ contains
         call push2prg_ptr_array(check_states)
         call push2prg_ptr_array(consolidate_chunks)
         call push2prg_ptr_array(conv_atom_denoise)
+        call push2prg_ptr_array(clin_fsc)
         call push2prg_ptr_array(cluster2D)
         call push2prg_ptr_array(cluster2D_nano)
         call push2prg_ptr_array(cluster2D_subsets)
@@ -775,6 +777,8 @@ contains
                 ptr2prg => consolidate_chunks
             case('conv_atom_denoise')
                 ptr2prg => conv_atom_denoise
+            case('clin_fsc')
+                ptr2prg => clin_fsc
             case('cluster2D')
                 ptr2prg => cluster2D
             case('cluster2D_nano')
@@ -1038,6 +1042,7 @@ contains
         write(logfhandle,'(A)') check_states%name
         write(logfhandle,'(A)') consolidate_chunks%name
         write(logfhandle,'(A)') cleanup2D%name
+        write(logfhandle,'(A)') clin_fsc%name
         write(logfhandle,'(A)') cluster_cavgs%name
         write(logfhandle,'(A)') cluster2D%name
         write(logfhandle,'(A)') cluster2D_subsets%name
@@ -1329,7 +1334,6 @@ contains
         call set_param(eer_fraction,   'eer_fraction', 'num',    '# of EER frames to fraction together', 'Number of raw EER frames to fraction together', '# EER frames{20}', .false., 20.)
         call set_param(eer_upsampling, 'eer_upsampling','multi', 'EER up-sampling', 'EER up-sampling(1=4K|2=8K){1}', '(1|2){1}', .false., 1.)
         call set_param(gainref,        'gainref',      'file',   'Gain reference', 'Gain reference image', 'input image e.g. gainref.mrc', .false., '')
-        call set_param(groupframes,    'groupframes',  'binary', 'Patch motion correction frames averaging', 'Whether to perform frames averaging during motion correction - for patchesonly(yes|no){no}', '(yes|no){no}', .false., 'no')
         call set_param(mcpatch,        'mcpatch',      'binary', 'Patch-based motion correction', 'Whether to perform Patch-based motion correction(yes|no){yes}', '(yes|no){yes}', .false., 'yes')
         call set_param(mcpatch_thres,'mcpatch_thres','binary','Use motion correction patch threshold', 'Whether to use the threshold for motion correction patch solution(yes|no){yes}', '(yes|no){yes}', .false., 'yes')
         call set_param(mcconvention,   'mcconvention', 'str',    'Frame of reference during movie alignment', 'Frame of reference during movie alignment; simple/unblur:central; relion/motioncorr:first(simple|unblur|relion|motioncorr){simple}', '(simple|unblur|relion|motioncorr){simple}', .false., 'simple')
@@ -2677,6 +2681,36 @@ contains
         call fsc%set_input('comp_ctrls', 1, nthr)
     end subroutine new_fsc
 
+    subroutine new_clin_fsc
+        ! PROGRAM SPECIFICATION
+        call clin_fsc%new(&
+        &'fsc', &                                                               ! name
+        &'Calculate FSC between the two input volumes',&                        ! descr_short
+        &'is a program for calculating the FSC between the two input volumes',& ! descr_long
+        &'simple_exec',&                                                        ! executable
+        &2, 1, 0, 0, 2, 2, 1, .false.)                                          ! # entries in each group, requires sp_project
+        ! INPUT PARAMETER SPECIFICATIONS
+        ! image input/output
+        call clin_fsc%set_input('img_ios', 1, 'vol1', 'file', 'Odd volume',  'Odd volume',  'vol1.mrc file', .true., '')
+        call clin_fsc%set_input('img_ios', 2, 'vol2', 'file', 'Even volume', 'Even volume', 'vol2.mrc file', .true., '')
+        ! parameter input/output
+        call clin_fsc%set_input('parm_ios', 1, smpd)
+        ! alternative inputs
+        ! <empty>
+        ! search controls
+        ! <empty>
+        ! filter controls
+        hp%required = .false.
+        lp%required = .false.
+        call clin_fsc%set_input('filt_ctrls', 1, hp)
+        call clin_fsc%set_input('filt_ctrls', 2, lp)
+        ! mask controls
+        call clin_fsc%set_input('mask_ctrls', 1, mskdiam)
+        call clin_fsc%set_input('mask_ctrls', 2, mskfile)
+        ! computer controls
+        call clin_fsc%set_input('comp_ctrls', 1, nthr)
+    end subroutine new_clin_fsc
+
     subroutine new_gen_pspecs_and_thumbs
         ! PROGRAM SPECIFICATION
         call gen_pspecs_and_thumbs%new(&
@@ -3991,7 +4025,7 @@ contains
         call pick%set_input('srch_ctrls', 2, pick_roi, gui_submenu="picking")
         call pick%set_input('srch_ctrls', 3, backgr_subtr, gui_submenu="picking")
         call pick%set_input('srch_ctrls', 4, crowded, gui_submenu="picking")
-        call pick%set_input('srch_ctrls', 5, 'winsz', 'num', 'Window size for sauvol', 'Window size for local sauvol binarisation', 'winsz in pixels ', .false., 32.)
+        call pick%set_input('srch_ctrls', 5, 'winsz', 'num', 'Window size for sauvola', 'Window size for local sauvola binarisation', 'winsz in pixels ', .false., 32.)
         ! filter controls
         call pick%set_input('filt_ctrls', 1, lp, gui_submenu="picking")
         ! mask controls
@@ -7247,6 +7281,10 @@ contains
                         if( allocated(arr(i)%descr_short)       ) deallocate(arr(i)%descr_short      )
                         if( allocated(arr(i)%descr_long)        ) deallocate(arr(i)%descr_long       )
                         if( allocated(arr(i)%descr_placeholder) ) deallocate(arr(i)%descr_placeholder)
+                        if( allocated(arr(i)%gui_submenu)       ) deallocate(arr(i)%gui_submenu)
+                        if( allocated(arr(i)%active_flags)      ) deallocate(arr(i)%active_flags)
+                        if( allocated(arr(i)%exclusive_group)   ) deallocate(arr(i)%exclusive_group)
+                        if( allocated(arr(i)%cval_default)      ) deallocate(arr(i)%cval_default)
                     end do
                     deallocate(arr)
                 endif
