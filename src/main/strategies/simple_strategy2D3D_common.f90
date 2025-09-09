@@ -336,7 +336,7 @@ contains
             call img%norm_within(build_glob%lmsk)
         endif
         ! Fourier cropping
-        if( trim(params_glob%sh_sto).eq.'yes' )then
+        if( trim(params_glob%sh_inc).eq.'no' )then
             call img%fft()
             ! Phase-flipping
             ctfparms = build_glob%spproj%get_ctfparams(params_glob%oritype, iptcl)

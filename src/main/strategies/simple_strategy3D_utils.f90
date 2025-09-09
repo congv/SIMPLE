@@ -34,7 +34,7 @@ contains
         ! Euler angle
         call build_glob%spproj_field%set_euler(s%iptcl, s3D%proj_space_euls(:,ref,s%ithr))
         ! shift
-        if( trim(params_glob%sh_sto).eq.'yes' )then
+        if( trim(params_glob%sh_inc).eq.'no' )then
             shvec      = sh
             shvec_incr = sh - s%prev_shvec
         else
