@@ -231,13 +231,13 @@ contains
         type(oris), optional, intent(in) :: reforis
         real,          parameter :: EPSILON = 0.1
         logical,       parameter :: l_kb = .true.
-        complex(dp), allocatable :: pfts_cavg(:,:,:), pfts_clin(:,:,:), clin_odd(:,:,:), clin_even(:,:,:)
+        complex(dp), allocatable :: pfts_cavg(:,:,:), pfts_clin(:,:,:)
         real,        allocatable :: res(:)
         complex(dp) :: pfts_clin_even(pftsz,kfromto(1):kfromto(2),ncls),pfts_clin_odd(pftsz,kfromto(1):kfromto(2),ncls),&
                       &pft(pftsz,kfromto(1):kfromto(2)),pfte(pftsz,kfromto(1):kfromto(2)),pfto(pftsz,kfromto(1):kfromto(2))
         real(dp)    :: ctf2(pftsz,kfromto(1):kfromto(2)),ctf2e(pftsz,kfromto(1):kfromto(2)),ctf2o(pftsz,kfromto(1):kfromto(2)),&
                       &ctf2_clin_even(pftsz,kfromto(1):kfromto(2),ncls), ctf2_clin_odd(pftsz,kfromto(1):kfromto(2),ncls)
-        integer     :: icls, eo_pop(2), pop, k, pops(ncls), npops, m
+        integer     :: icls, eo_pop(2), pop, k, pops(ncls), npops, m, j
         real        :: res_fsc05, res_fsc0143, min_res_fsc0143, max_res_fsc0143, avg_res_fsc0143, avg_res_fsc05,&
                       &cavg_clin_frcs(pftsz,kfromto(1):kfromto(2),ncls), dfrcs(kfromto(1):kfromto(2),ncls)
         if( l_comlin )then
@@ -248,23 +248,30 @@ contains
             ! Common-lines conribution
             call calc_comlin_contrib(reforis, build_glob%pgrpsyms)
             ! need to compute the cavg/clin frcs prior to their summing
-            if( trim(params_glob%polar_frcs) .eq. 'yes' )then
+            if( trim(params_glob%polar_frcs) .eq. 'yes' .or. trim(params_glob%prob_frc) .eq. 'yes' )then
                 allocate(pfts_cavg(pftsz,kfromto(1):kfromto(2),ncls),&
-                        &pfts_clin(pftsz,kfromto(1):kfromto(2),ncls),&
-                        &clin_even(pftsz,kfromto(1):kfromto(2),ncls),&
-                        &clin_odd( pftsz,kfromto(1):kfromto(2),ncls),source=DCMPLX_ZERO)
+                        &pfts_clin(pftsz,kfromto(1):kfromto(2),ncls),source=DCMPLX_ZERO)
                 cavg_clin_frcs = 1.
                 call get_cavg_clin
                 !$omp parallel do default(shared) schedule(static) proc_bind(close)&
-                !$omp private(icls,k)
+                !$omp private(icls,k,j)
                 do icls = 1, ncls
                     if( pops(icls) < 2 )cycle
                     do k = kfromto(1), kfromto(2)
                         call nonuni_frc(pfts_clin(:,k,icls), pfts_cavg(:,k,icls), cavg_clin_frcs(:,k,icls))
+                        if( trim(params_glob%prob_frc) .eq. 'yes' )then
+                            do j = 1, pftsz
+                                if( ran3() < cavg_clin_frcs(j,k,icls) )then
+                                    cavg_clin_frcs(j,k,icls) = 1.
+                                else
+                                    cavg_clin_frcs(j,k,icls) = 0.
+                                endif
+                            enddo
+                        endif
                     enddo
                 enddo
                 !$omp end parallel do
-                deallocate(pfts_cavg,pfts_clin,clin_odd,clin_even)
+                deallocate(pfts_cavg,pfts_clin)
             endif
         endif
         pfts_merg = DCMPLX_ZERO
@@ -344,7 +351,7 @@ contains
                 THROW_HARD('Unsupported ref_type mode. It should be cavg, clin, or vol')
         end select
         ! Directional FRCs
-        if( trim(params_glob%polar_frcs) .eq. 'yes' )then
+        if( trim(params_glob%polar_frcs) .eq. 'yes' .or. trim(params_glob%prob_frc) .eq. 'yes' )then
             pfts_merg = pfts_merg * cavg_clin_frcs
             ! res = get_resarr(params_glob%box_crop, params_glob%smpd_crop)
             ! ! min/max frc between cavg and clin
@@ -413,7 +420,7 @@ contains
             complex(dp), intent(in)    :: pft1(pftsz)
             complex(dp), intent(in)    :: pft2(pftsz)
             real,        intent(inout) :: pfrc(pftsz)
-            integer,     parameter     :: NKER = 3, HALF = NKER/2, MID = HALF + 1
+            integer,     parameter     :: NKER = 5, HALF = NKER/2, MID = HALF + 1
             integer  :: i
             real(dp) :: numer, denom1, denom2
             do i = MID, pftsz - HALF
@@ -494,8 +501,6 @@ contains
             !$omp parallel do default(shared) schedule(static) proc_bind(close)&
             !$omp private(icls,pft,ctf2)
             do icls = 1,ncls
-                call safe_norm(pfts_clin_even(:,:,icls), ctf2_clin_even(:,:,icls), clin_even(:,:,icls))
-                call safe_norm(pfts_clin_odd( :,:,icls), ctf2_clin_odd( :,:,icls), clin_odd( :,:,icls))
                 pft  = pfts_clin_even(:,:,icls) + pfts_clin_odd(:,:,icls)
                 ctf2 = ctf2_clin_even(:,:,icls) + ctf2_clin_odd(:,:,icls)
                 call safe_norm(pft, ctf2, pfts_clin(:,:,icls))

@@ -103,6 +103,7 @@ type :: parameters
     character(len=3)          :: proj_is_class='no'   !< intepret projection directions as classes
     character(len=3)          :: projstats='no'
     character(len=3)          :: prune='no'
+    character(len=3)          :: prob_frc='no'        !< using frc between cavg and clin as prob to mute the freq(yes|no){no}
     character(len=3)          :: prob_inpl='no'       !< probabilistic in-plane search in refine=neigh mode(yes|no){no}
     character(len=3)          :: prob_sh='no'         !< shift information in the prob tab (yes|no){no}
     character(len=3)          :: projrec='no'         !< Whether to reconstruct from summed projection directions (yes|no){no}
@@ -714,6 +715,7 @@ contains
         call check_carg('pre_norm',       self%pre_norm)
         call check_carg('prg',            self%prg)
         call check_carg('print_corrs',    self%print_corrs)
+        call check_carg('prob_frc',       self%prob_frc)
         call check_carg('prob_inpl',      self%prob_inpl)
         call check_carg('prob_sh',        self%prob_sh)
         call check_carg('proj_is_class',  self%proj_is_class)
