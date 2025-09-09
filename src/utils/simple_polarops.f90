@@ -236,20 +236,11 @@ contains
         complex(dp) :: pfts_clin_even(pftsz,kfromto(1):kfromto(2),ncls),pfts_clin_odd(pftsz,kfromto(1):kfromto(2),ncls),&
                       &pft(pftsz,kfromto(1):kfromto(2)),pfte(pftsz,kfromto(1):kfromto(2)),pfto(pftsz,kfromto(1):kfromto(2))
         real(dp)    :: ctf2(pftsz,kfromto(1):kfromto(2)),ctf2e(pftsz,kfromto(1):kfromto(2)),ctf2o(pftsz,kfromto(1):kfromto(2)),&
-                      &ctf2_clin_even(pftsz,kfromto(1):kfromto(2),ncls), ctf2_clin_odd(pftsz,kfromto(1):kfromto(2),ncls),&
-                      &numer, denom1, denom2
+                      &ctf2_clin_even(pftsz,kfromto(1):kfromto(2),ncls), ctf2_clin_odd(pftsz,kfromto(1):kfromto(2),ncls)
         integer     :: icls, eo_pop(2), pop, k, pops(ncls), npops, m
         real        :: res_fsc05, res_fsc0143, min_res_fsc0143, max_res_fsc0143, avg_res_fsc0143, avg_res_fsc05,&
-                      &cavg_clin_frcs(kfromto(1):kfromto(2),ncls), dfrcs(kfromto(1):kfromto(2),ncls)
-        logical     :: ymirror
+                      &cavg_clin_frcs(pftsz,kfromto(1):kfromto(2),ncls), dfrcs(kfromto(1):kfromto(2),ncls)
         if( l_comlin )then
-            ! handling of mirroring
-            ymirror = .false.
-            if( build_glob%pgrpsyms%is_circular() )then
-                ymirror = .true.
-            else
-                ymirror = build_glob%pgrpsyms%is_icosahedral()
-            endif
             ! 3D-related tasks
             if( .not. present(reforis) )THROW_HARD('Reference orientations need be inputted in polar_cavger_merge_eos_and_norm')
             ! Mirroring etc.
@@ -265,14 +256,11 @@ contains
                 cavg_clin_frcs = 1.
                 call get_cavg_clin
                 !$omp parallel do default(shared) schedule(static) proc_bind(close)&
-                !$omp private(icls,k,numer,denom1,denom2)
+                !$omp private(icls,k)
                 do icls = 1, ncls
                     if( pops(icls) < 2 )cycle
                     do k = kfromto(1), kfromto(2)
-                        numer  = real(sum(         pfts_cavg(:,k,icls) * conjg(pfts_clin(:,k,icls))),dp)
-                        denom1 =      sum(csq_fast(pfts_cavg(:,k,icls)))
-                        denom2 =      sum(csq_fast(pfts_clin(:,k,icls)))
-                        if( denom1*denom2 > DTINY ) cavg_clin_frcs(k,icls) = min(cavg_clin_frcs(k,icls),real(numer / dsqrt(denom1*denom2)))
+                        call nonuni_frc(pfts_clin(:,k,icls), pfts_cavg(:,k,icls), cavg_clin_frcs(:,k,icls))
                     enddo
                 enddo
                 !$omp end parallel do
@@ -325,15 +313,9 @@ contains
                     call safe_norm(pfto, ctf2o, pfts_odd(:,:,icls))
                     ! mirroring the restored images
                     m = reforis%get_int(icls,'mirr')
-                    if( ymirror )then
-                        call mirror_pft(pfts_merg(:,:,icls), pfts_merg(:,:,m))
-                        call mirror_pft(pfts_even(:,:,icls), pfts_even(:,:,m))
-                        call mirror_pft(pfts_odd(:,:,icls),  pfts_odd(:,:,m))
-                    else
-                        call mirrorx_pft(pfts_merg(:,:,icls), pfts_merg(:,:,m))
-                        call mirrorx_pft(pfts_even(:,:,icls), pfts_even(:,:,m))
-                        call mirrorx_pft(pfts_odd(:,:,icls),  pfts_odd(:,:,m))
-                    endif
+                    call mirror_pft(pfts_merg(:,:,icls), pfts_merg(:,:,m))
+                    call mirror_pft(pfts_even(:,:,icls), pfts_even(:,:,m))
+                    call mirror_pft(pfts_odd(:,:,icls),  pfts_odd(:,:,m))
                 enddo
                 !$omp end parallel do
             case('vol')
@@ -353,15 +335,9 @@ contains
                     call safe_norm(pfto, ctf2o, pfts_odd(:,:,icls))
                     ! mirroring the restored images
                     m = reforis%get_int(icls,'mirr')
-                    if( ymirror )then
-                        call mirror_pft(pfts_merg(:,:,icls), pfts_merg(:,:,m))
-                        call mirror_pft(pfts_even(:,:,icls), pfts_even(:,:,m))
-                        call mirror_pft(pfts_odd(:,:,icls),  pfts_odd(:,:,m))
-                    else
-                        call mirrorx_pft(pfts_merg(:,:,icls), pfts_merg(:,:,m))
-                        call mirrorx_pft(pfts_even(:,:,icls), pfts_even(:,:,m))
-                        call mirrorx_pft(pfts_odd(:,:,icls),  pfts_odd(:,:,m))
-                    endif
+                    call mirror_pft(pfts_merg(:,:,icls), pfts_merg(:,:,m))
+                    call mirror_pft(pfts_even(:,:,icls), pfts_even(:,:,m))
+                    call mirror_pft(pfts_odd(:,:,icls),  pfts_odd(:,:,m))
                 enddo
                 !$omp end parallel do
             case DEFAULT
@@ -369,14 +345,7 @@ contains
         end select
         ! Directional FRCs
         if( trim(params_glob%polar_frcs) .eq. 'yes' )then
-            !$omp parallel do default(shared) schedule(static) proc_bind(close)&
-            !$omp private(icls,k)
-            do icls = 1, ncls
-                do k = kfromto(1), kfromto(2)
-                    pfts_merg(:,k,icls) = pfts_merg(:,k,icls) * cavg_clin_frcs(k,icls)
-                enddo
-            enddo
-            !$omp end parallel do
+            pfts_merg = pfts_merg * cavg_clin_frcs
             ! res = get_resarr(params_glob%box_crop, params_glob%smpd_crop)
             ! ! min/max frc between cavg and clin
             ! min_res_fsc0143 = HUGE(min_res_fsc0143)
@@ -436,7 +405,41 @@ contains
             ! ! 3D FSC = AVERAGE RESOLUTION
             ! write(logfhandle,'(A,2F8.2)')'>>> 3D EVEN/ODD RESOLUTION @ FSC=0.5/0.143              : ',avg_res_fsc05,avg_res_fsc0143
         endif
+
       contains
+
+        ! nonuniform frc filter
+        subroutine nonuni_frc(pft1, pft2, pfrc)
+            complex(dp), intent(in)    :: pft1(pftsz)
+            complex(dp), intent(in)    :: pft2(pftsz)
+            real,        intent(inout) :: pfrc(pftsz)
+            integer,     parameter     :: NKER = 3, HALF = NKER/2, MID = HALF + 1
+            integer  :: i
+            real(dp) :: numer, denom1, denom2
+            do i = MID, pftsz - HALF
+                pfrc(i) = 1._dp
+                numer   = real(sum(         pft1(i-HALF:i+HALF) * conjg(pft2(i-HALF:i+HALF))),dp)
+                denom1  =      sum(csq_fast(pft1(i-HALF:i+HALF)))
+                denom2  =      sum(csq_fast(pft2(i-HALF:i+HALF)))
+                if( denom1*denom2 > DTINY ) pfrc(i) = real(numer / dsqrt(denom1*denom2))
+            enddo
+            do i = 1, MID-1
+                pfrc(i) = 1._dp
+                numer   = real(sum(         pft1(           1:i+HALF) * conjg(pft2(           1:i+HALF))),dp)
+                numer   = real(sum(         pft1(pftsz-HALF+i:pftsz ) * conjg(pft2(pftsz-HALF+i:pftsz ))),dp) + numer
+                denom1  =      sum(csq_fast(pft1(1:i+HALF))) + sum(csq_fast(pft1(pftsz-HALF+i:pftsz)))
+                denom2  =      sum(csq_fast(pft2(1:i+HALF))) + sum(csq_fast(pft2(pftsz-HALF+i:pftsz)))
+                if( denom1*denom2 > DTINY ) pfrc(i) = real(numer / dsqrt(denom1*denom2))
+            enddo
+            do i = pftsz-HALF+1, pftsz
+                pfrc(i) = 1._dp
+                numer   = real(sum(         pft1(     1:HALF-(pftsz-i)) * conjg(pft2(     1:HALF-(pftsz-i)))),dp)
+                numer   = real(sum(         pft1(i-HALF:pftsz         ) * conjg(pft2(i-HALF:pftsz         ))),dp) + numer
+                denom1  =      sum(csq_fast(pft1(1:HALF-(pftsz-i)))) + sum(csq_fast(pft1(i-HALF:pftsz)))
+                denom2  =      sum(csq_fast(pft2(1:HALF-(pftsz-i)))) + sum(csq_fast(pft2(i-HALF:pftsz)))
+                if( denom1*denom2 > DTINY ) pfrc(i) = real(numer / dsqrt(denom1*denom2))
+            enddo
+        end subroutine nonuni_frc
 
         ! Deals with summing slices and their mirror
         subroutine mirror_slices( ref_space, symop )
@@ -451,21 +454,14 @@ contains
             !$omp parallel do default(shared) proc_bind(close) private(iref,mref,pft,ctf2)
             do iref = 1,ncls/2
                 mref = ref_space%get_int(iref,'mirr')
-                if( ymirror )then
-                    call mirror_pft(pfts_even(:,:,mref), pft)
-                    pfts_even(:,:,iref) = pfts_even(:,:,iref) + pft
-                    call mirror_pft(pfts_odd(:,:,mref), pft)
-                    pfts_odd(:,:,iref)  = pfts_odd(:,:,iref)  + pft
-                    call mirror_pft( pfts_even(:,:,iref), pfts_even(:,:,mref))
-                    call mirror_pft( pfts_odd(:,:,iref),  pfts_odd(:,:,mref))
-                else
-                    call mirrorx_pft(pfts_even(:,:,mref), pft)
-                    pfts_even(:,:,iref) = pfts_even(:,:,iref) + pft
-                    call mirrorx_pft(pfts_odd(:,:,mref), pft)
-                    pfts_odd(:,:,iref)  = pfts_odd(:,:,iref)  + pft
-                    call mirrorx_pft( pfts_even(:,:,iref), pfts_even(:,:,mref))
-                    call mirrorx_pft( pfts_odd(:,:,iref),  pfts_odd(:,:,mref))
-                endif
+                ! Fourier components
+                call mirror_pft(pfts_even(:,:,mref), pft)
+                pfts_even(:,:,iref) = pfts_even(:,:,iref) + pft
+                call mirror_pft(pfts_odd(:,:,mref), pft)
+                pfts_odd(:,:,iref)  = pfts_odd(:,:,iref)  + pft
+                call mirror_pft( pfts_even(:,:,iref), pfts_even(:,:,mref))
+                call mirror_pft( pfts_odd(:,:,iref),  pfts_odd(:,:,mref))
+                ! CTF
                 call mirror_ctf2(ctf2_even(:,:,mref), ctf2)
                 ctf2_even(:,:,iref) = ctf2_even(:,:,iref) + ctf2
                 call mirror_ctf2(ctf2_odd(:,:,mref),  ctf2)
@@ -496,20 +492,13 @@ contains
             end do
             !$omp end parallel do
             !$omp parallel do default(shared) schedule(static) proc_bind(close)&
-            !$omp private(icls,pft,ctf2,k,numer,denom1,denom2)
+            !$omp private(icls,pft,ctf2)
             do icls = 1,ncls
                 call safe_norm(pfts_clin_even(:,:,icls), ctf2_clin_even(:,:,icls), clin_even(:,:,icls))
                 call safe_norm(pfts_clin_odd( :,:,icls), ctf2_clin_odd( :,:,icls), clin_odd( :,:,icls))
                 pft  = pfts_clin_even(:,:,icls) + pfts_clin_odd(:,:,icls)
                 ctf2 = ctf2_clin_even(:,:,icls) + ctf2_clin_odd(:,:,icls)
                 call safe_norm(pft, ctf2, pfts_clin(:,:,icls))
-                if( pops(icls) < 2 )cycle
-                do k = kfromto(1), kfromto(2)
-                    numer  = real(sum(         clin_even(:,k,icls) * conjg(clin_odd(:,k,icls))),dp)
-                    denom1 =      sum(csq_fast(clin_even(:,k,icls)))
-                    denom2 =      sum(csq_fast(clin_odd( :,k,icls)))
-                    if( denom1*denom2 > DTINY ) cavg_clin_frcs(k,icls) = real(numer / dsqrt(denom1*denom2))
-                enddo
             enddo
             !$omp end parallel do
         end subroutine get_cavg_clin
@@ -690,13 +679,8 @@ contains
             !$omp do schedule(static)
             do iref = 1,ncls/2
                 mref = ref_space%get_int(iref,'mirr')
-                if( ymirror )then
-                    call mirror_pft(pfts_clin_even(:,:,iref), pfts_clin_even(:,:,mref))
-                    call mirror_pft(pfts_clin_odd(:,:,iref),  pfts_clin_odd(:,:,mref))
-                else
-                    call mirrorx_pft(pfts_clin_even(:,:,iref), pfts_clin_even(:,:,mref))
-                    call mirrorx_pft(pfts_clin_odd(:,:,iref),  pfts_clin_odd(:,:,mref))
-                endif
+                call mirror_pft(pfts_clin_even(:,:,iref), pfts_clin_even(:,:,mref))
+                call mirror_pft(pfts_clin_odd(:,:,iref),  pfts_clin_odd(:,:,mref))
                 call mirror_ctf2(ctf2_clin_even(:,:,iref), ctf2_clin_even(:,:,mref))
                 call mirror_ctf2(ctf2_clin_odd(:,:,iref),  ctf2_clin_odd(:,:,mref))
             enddo
@@ -1210,14 +1194,6 @@ contains
         i = pftsz/2 + 1
         pftout(i,:) = pftin(i,:)
     end subroutine mirror_pft
-
-    ! produces x-mirror of complex matrix (=complex conjugate of y-mirror)
-    pure subroutine mirrorx_pft( pftin, pftout )
-        complex(dp), intent(in)    :: pftin(pftsz,kfromto(1):kfromto(2))
-        complex(dp), intent(inout) :: pftout(pftsz,kfromto(1):kfromto(2))
-        call mirror_pft(pftin, pftout)
-        pftout = conjg(pftout)
-    end subroutine mirrorx_pft
 
     ! Private utility
     pure subroutine safe_norm( Mnum, Mdenom, Mout )
