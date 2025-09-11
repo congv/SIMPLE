@@ -190,7 +190,7 @@ contains
         if( present(irot_in) ) irot = irot_in
         ! BFGS over shifts with in-plane rot exhaustive callback
         call self%grad_shsrch_obj%set_indices(iref, self%iptcl)
-        if( params_glob%l_sh_first )then
+        if( params_glob%l_sh_first .and. trim(params_glob%sh_inc).eq.'yes' )then
             cxy = self%grad_shsrch_obj%minimize(irot=irot, xy_in=self%xy_first)
         else
             cxy = self%grad_shsrch_obj%minimize(irot=irot)
