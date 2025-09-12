@@ -35,7 +35,7 @@ contains
         class(strategy3D_greedy), intent(inout) :: self
         integer,                  intent(in)    :: ithr
         integer :: iref, isample, loc(1)
-        real    :: inpl_corrs(self%s%nrots)
+        real    :: inpl_corrs(self%s%nrots), corr, sh(2), inpl
         if( build_glob%spproj_field%get_state(self%s%iptcl) > 0 )then
             ! set thread index
             self%s%ithr = ithr
@@ -54,15 +54,15 @@ contains
                         call pftcc_glob%gencorrs(iref, self%s%iptcl, inpl_corrs)
                     endif
                     loc = maxloc(inpl_corrs)
-                    call self%s%store_solution(iref, loc(1), inpl_corrs(loc(1)))
+                    call self%s%store_solution(iref, loc(1), inpl_corrs(loc(1)), sh=self%s%xy_first_rot)
                 endif
             end do
+            iref = maxloc(s3D%proj_space_corrs(:,self%s%ithr), dim=1)
+            corr = s3D%proj_space_corrs(   iref,self%s%ithr)
+            sh   = s3D%proj_space_shift(:, iref,self%s%ithr)
+            inpl = s3D%proj_space_inplinds(iref,self%s%ithr)
             ! in greedy mode, we evaluate all refs
             self%s%nrefs_eval = self%s%nrefs
-            ! take care of the in-planes
-            call self%s%inpl_srch
-            ! prepare orientation
-            call self%oris_assign
         else
             call build_glob%spproj_field%reject(self%s%iptcl)
         endif
