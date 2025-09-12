@@ -61,6 +61,7 @@ contains
             corr = s3D%proj_space_corrs(   iref,self%s%ithr)
             sh   = s3D%proj_space_shift(:, iref,self%s%ithr)
             inpl = s3D%proj_space_inplinds(iref,self%s%ithr)
+            call assign_ori( s, iref, inpl, corr, sh )
             ! in greedy mode, we evaluate all refs
             self%s%nrefs_eval = self%s%nrefs
         else

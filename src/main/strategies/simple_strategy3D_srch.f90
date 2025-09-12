@@ -162,7 +162,7 @@ contains
         ! BFGS over shifts with in-plane rot exhaustive callback
         irot = self%prev_roind
         call self%grad_shsrch_first_obj%set_indices(self%prev_ref, self%iptcl)
-        cxy = self%grad_shsrch_first_obj%minimize(irot=irot, sh_rot=.false.)
+        cxy = self%grad_shsrch_first_obj%minimize(irot=irot, sh_rot=.true.)
         if( irot == 0 ) cxy(2:3) = 0.
         self%xy_first = cxy(2:3)
         self%xy_first_rot = 0.
