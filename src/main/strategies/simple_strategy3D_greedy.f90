@@ -34,8 +34,8 @@ contains
     subroutine srch_greedy( self, ithr )
         class(strategy3D_greedy), intent(inout) :: self
         integer,                  intent(in)    :: ithr
-        integer :: iref, isample, loc(1)
-        real    :: inpl_corrs(self%s%nrots), corr, sh(2), inpl
+        integer :: iref, isample, loc(1), inpl
+        real    :: inpl_corrs(self%s%nrots), corr, sh(2)
         if( build_glob%spproj_field%get_state(self%s%iptcl) > 0 )then
             ! set thread index
             self%s%ithr = ithr
@@ -61,7 +61,7 @@ contains
             corr = s3D%proj_space_corrs(   iref,self%s%ithr)
             sh   = s3D%proj_space_shift(:, iref,self%s%ithr)
             inpl = s3D%proj_space_inplinds(iref,self%s%ithr)
-            call assign_ori( s, iref, inpl, corr, sh )
+            call assign_ori( self%s, iref, inpl, corr, sh )
             ! in greedy mode, we evaluate all refs
             self%s%nrefs_eval = self%s%nrefs
         else
